@@ -43,25 +43,29 @@ Then open <http://localhost:8000> in a browser.
 - Use **Show all lightcurves** to compare all 256 pixels.
 - Use **Export range as WebM** to save a silent animation of the heatmap and selected-pixel lightcurve for the selected frame range.
 - Press **Start Strudel** to start the live house patterns. Press **Stop Strudel** to silence them. The browser only starts audio after that user gesture.
-- The 16 × 16 detector is divided into 4 × 4 regions. Each region controls one pattern; the four detector sub-quadrants independently set **Reverb** (top-left, up to 50%), **Volume** (top-right), **Delay** (bottom-left, up to 50%), and **Density** (bottom-right). The UI overlays the 4 × 4 block boundaries and shows current control values.
-- Each quadrant’s four samples are normalized against that dataset’s 1st–99th percentile range and clipped to 0–1. Volume spans 5–100%, reverb and delay each span 0–50%, and density spans 20–100% of pattern events.
+- Each displayed detector block is 4 × 4 pixels. Its 16 pixel values are averaged to report the block's mean light intensity in photons. The mean is also normalized against that dataset's 1st–99th percentile range and clipped to 0–1 for consistent thresholding across datasets.
+- Every pattern block has its own adjustable **Quiet threshold** slider (default 30% of the normalized range). If its block-average light is below the threshold, the quiet version plays; otherwise, the full version plays. A block changing its threshold does not change any other block.
+- The 2 × 2 top-left, top-right, and bottom-left sub-quadrants set **Reverb** (up to 50%), **Volume** (5–100%), and **Delay** (up to 50%). Density/sparsity is intentionally not used in the Strudel patterns.
+- Pattern columns are panned left-to-right at 90% left, 30% left, 30% right, and 90% right. The outer blocks are therefore strongly separated in stereo; the two middle blocks sit nearer the center.
+- Hover over the detector heatmap for the instrument, part, block average, and quiet/full state assigned to that 4 × 4 region.
+- Instrument rows follow the detector from top to bottom: keys, drums, bass, percussion. Each uses four distinct parts. The bass has matching left/right low pulses and two higher, complementary runs in the middle; percussion includes stereo shakers, tom accents, and clave/rim.
 - While Strudel is running, the active script is re-evaluated at most twice per second with current detector controls. **Apply current frame** immediately applies the currently displayed frame.
 
-The 16 starter patterns are separated into four roles per row: bass (sub, offbeat, walking line, fill), keys/synth (chord stabs, arpeggio, pad, lead), percussion (clap, shaker, tambourine, rim), and drums (kick, snare, hi-hat, tom). Each `$:` line is an independent Strudel pattern, so you can edit each part without needing to combine the instruments yourself.
+There are four patterns per instrument row. The drums put a low kick with hi-hat on the left, snare and tom in the center, and a higher kick with hi-hat on the right. Both kicks share the same quiet heartbeat (`bd [~ bd] ~ ~`) and full four-on-the-floor (`bd*4`) rhythms, with different playback speeds and stereo positions. The snare has an additional 15% gain multiplier to keep it behind the kick. The keys put matching chord progressions with different inversions on the outer blocks and a structurally matching, chord-tone melody across the inner pair. Quiet keys switch to quiet, scattered high-register phrases.
 
 ### Editing the Strudel patterns
 
-Open **Strudel script — edit patterns**. Each line beginning with `$:` is a normal Strudel pattern. Change the notes, sample names, mini-notation, or effects in those expressions. Keep the `{{track.parameter}}` placeholders in place when you want a value to follow its detector quadrant. The app substitutes numbers for those placeholders before handing the code to Strudel; for example:
+Open **Strudel script — edit patterns**. Each line beginning with `$:` is a normal Strudel pattern. Change the notes, sample names, mini-notation, or effects in those expressions. Keep the `{{track.parameter}}` placeholders in place when you want a value to follow its detector block. A `{{track.pattern}}` placeholder switches between that track's quiet/full mini-notation patterns, while `volume`, `reverb`, `delay`, and `pan` are replaced by live numbers. For example:
 
 ```js
-$: s("bd*4").gain({{kick.volume}}).room({{kick.reverb}}).delay({{kick.delay}}).degradeBy({{kick.sparse}})
+$: stack(s("{{drum_kick_left.pattern}}").speed(0.82), s("hh*8").gain(0.22)).gain({{drum_kick_left.volume}}).room({{drum_kick_left.reverb}}).delay({{drum_kick_left.delay}}).pan({{drum_kick_left.pan}})
 ```
 
-The bundled Strudel web runtime is loaded from esm.sh at version 1.3.0; its starter drum samples are loaded from the public `tidalcycles/dirt-samples` repository. Starting Strudel therefore requires an internet connection. The editable starter script is in `app.js` as `patternTemplate`; change those patterns if you want the revised arrangement to be the new default. You can also copy the generated script from the browser into <https://strudel.cc/> to experiment there.
+The bundled Strudel web runtime is loaded from esm.sh at version 1.3.0; its starter drum samples are loaded from the public `tidalcycles/dirt-samples` repository. Starting Strudel therefore requires an internet connection. The editable starter script is in `app.js` as `patternTemplate`; quiet/full note patterns are in `patternModes`. Change those defaults if you want your revised arrangement to be the new starter. You can also copy the generated script from the browser into <https://strudel.cc/> to experiment there.
 
 ## Code layout
 
 - `convert_npy.py` prepares binary data and its JSON manifest.
-- `app.js` loads the float32 samples, draws the heatmap and plots, controls playback, maps detector sub-quadrants to pattern parameters, and runs Strudel.
+- `app.js` loads the float32 samples, computes block and quadrant averages, draws the heatmap and plots, controls playback, and runs the stereo Strudel patterns.
 - `index.html` and `style.css` provide the browser UI.
 - `visualize.py` is the original Python/Matplotlib implementation.

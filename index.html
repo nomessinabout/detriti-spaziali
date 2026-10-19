@@ -12,7 +12,7 @@
       <header>
         <p class="eyebrow">16 × 16 detector · live Strudel composition</p>
         <h1>Detector data explorer</h1>
-        <p class="intro">Browse detector frames and use their live light levels to shape a four-part house composition.</p>
+        <p class="intro">Browse detector frames and use their live light levels to shape a stereo keys, drums, bass, and percussion house composition.</p>
       </header>
 
       <section class="toolbar" aria-label="Dataset and playback controls">
@@ -54,7 +54,10 @@
               <span id="scale-max"></span>
             </div>
           </div>
-          <canvas id="detector" aria-label="Detector heatmap; click a pixel to select it"></canvas>
+          <div class="detector-canvas-wrap">
+            <canvas id="detector" aria-label="Detector heatmap; click a pixel to select it, hover for instrument block details"></canvas>
+            <div id="detector-tooltip" class="detector-tooltip" role="status" hidden></div>
+          </div>
         </section>
 
         <section class="panel lightcurve-panel">
@@ -82,7 +85,7 @@
         <div class="panel-heading">
           <div>
             <h2>Strudel pattern grid</h2>
-            <p>Each 4 × 4 detector block is one pattern: top-left reverb · top-right volume · bottom-left delay · bottom-right density.</p>
+            <p>Each 4 × 4 block reports its mean light level and has its own quiet threshold. The quadrants set reverb, volume, and delay; columns set stereo pan. Density is disabled for now.</p>
           </div>
           <div class="strudel-actions">
             <button id="strudel-start" type="button" disabled>Start Strudel</button>
@@ -100,7 +103,7 @@
       </section>
 
       <footer>
-        <p>Audio starts only after you press <strong>Start Strudel</strong>. Detector brightness maps to volume, reverb, delay, and note density; the four effects are limited to safe musical ranges.</p>
+        <p>Audio starts only after you press <strong>Start Strudel</strong>. The left/right pattern pairs are panned across stereo; low block averages select each part’s quieter variation until that block crosses its adjustable threshold.</p>
       </footer>
     </main>
   </body>

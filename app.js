@@ -25,6 +25,7 @@ const elements = {
   scaleMin: document.querySelector("#scale-min"),
   scaleMax: document.querySelector("#scale-max"),
   detector: document.querySelector("#detector"),
+  detectorTooltip: document.querySelector("#detector-tooltip"),
   lightcurve: document.querySelector("#lightcurve"),
   allCurvesPanel: document.querySelector("#all-curves-panel"),
   allCurvesChart: document.querySelector("#all-curves-chart"),
@@ -42,69 +43,141 @@ const colorStops = [
   [253, 231, 37],
 ];
 const littleEndian = new Uint8Array(new Uint16Array([1]).buffer)[0] === 1;
+const defaultQuietThreshold = 0.3;
+const quietThresholds = new Map();
 const instrumentRows = [
   {
-    label: "Bass",
-    tracks: [
-      ["bass_sub", "Sub pulse"],
-      ["bass_offbeat", "Offbeat"],
-      ["bass_walk", "Walking line"],
-      ["bass_fill", "Bass fill"],
-    ],
-  },
-  {
     label: "Keys / synth",
+    blockRow: 0,
     tracks: [
-      ["chord_stabs", "Chord stabs"],
-      ["arpeggio", "Arpeggio"],
-      ["pad", "Warm pad"],
-      ["lead", "Lead answer"],
-    ],
-  },
-  {
-    label: "Percussion",
-    tracks: [
-      ["clap", "Clap"],
-      ["shaker", "Shaker"],
-      ["tambourine", "Tambourine"],
-      ["rim", "Rim accents"],
+      ["keys_chord_left", "Left chord voicing"],
+      ["keys_melody_left", "Left melody"],
+      ["keys_melody_right", "Right melody"],
+      ["keys_chord_right", "Right chord voicing"],
     ],
   },
   {
     label: "Drums",
+    blockRow: 1,
     tracks: [
-      ["kick", "Kick"],
-      ["snare", "Snare"],
-      ["hihat", "Hi-hat"],
-      ["tom", "Tom fill"],
+      ["drum_kick_left", "Low kick + hi-hat"],
+      ["drum_snare", "Snare"],
+      ["drum_tom", "Tom fill"],
+      ["drum_kick_right", "High kick + hi-hat"],
+    ],
+  },
+  {
+    label: "Bass",
+    blockRow: 2,
+    tracks: [
+      ["bass_left", "Left bass pulse"],
+      ["bass_run_left", "Bass run 1"],
+      ["bass_run_right", "Bass run 2"],
+      ["bass_right", "Right bass pulse"],
+    ],
+  },
+  {
+    label: "Percussion",
+    blockRow: 3,
+    tracks: [
+      ["perc_shaker_left", "Left shaker"],
+      ["perc_tom", "Tom accents"],
+      ["perc_clave", "Clave / rim"],
+      ["perc_shaker_right", "Right shaker"],
     ],
   },
 ];
 const patternTemplate = `setcps(0.5)
 
-// Bass
-$: note("c2 ~ c2 ~").s("sawtooth").gain({{bass_sub.volume}}).room({{bass_sub.reverb}}).delay({{bass_sub.delay}})
-$: note("~ c2 ~ c2").s("triangle").gain({{bass_offbeat.volume}}).room({{bass_offbeat.reverb}}).delay({{bass_offbeat.delay}})
-$: note("<c2 eb2 g1 bb1>").s("sawtooth").gain({{bass_walk.volume}}).room({{bass_walk.reverb}}).delay({{bass_walk.delay}})
-$: note("c2 ~ [c2 eb2] ~").s("square").gain({{bass_fill.volume}}).room({{bass_fill.reverb}}).delay({{bass_fill.delay}})
-
 // Keys / synth
-$: note("<[c3,e3,g3] ~ [f3,a3,c4] ~>*4").s("triangle").gain({{chord_stabs.volume}}).room({{chord_stabs.reverb}})
-$: note("c4 eb4 g4 bb4").s("sine").gain({{arpeggio.volume}}).room({{arpeggio.reverb}}).delay({{arpeggio.delay}})
-$: note("<[c4,eb4,g4,bb4] [f3,a3,c4,eb4]>").s("sine").slow(2).gain({{pad.volume}}).room({{pad.reverb}}).delay({{pad.delay}})
-$: note("~ g4 ~ eb4").s("triangle").gain({{lead.volume}}).room({{lead.reverb}}).delay({{lead.delay}})
-
-// Percussion
-$: s("~ cp ~ cp").gain({{clap.volume}}).room({{clap.reverb}}).delay({{clap.delay}})
-$: s("sh*16").gain({{shaker.volume}}).room({{shaker.reverb}}).delay({{shaker.delay}})
-$: s("~ tb ~ tb").gain({{tambourine.volume}}).room({{tambourine.reverb}}).delay({{tambourine.delay}})
-$: s("~ rim ~ [rim rim]").gain({{rim.volume}}).room({{rim.reverb}}).delay({{rim.delay}})
+$: note("{{keys_chord_left.pattern}}").s("triangle").gain({{keys_chord_left.volume}}).room({{keys_chord_left.reverb}}).delay({{keys_chord_left.delay}}).pan({{keys_chord_left.pan}})
+$: note("{{keys_melody_left.pattern}}").s("sine").gain({{keys_melody_left.volume}}).room({{keys_melody_left.reverb}}).delay({{keys_melody_left.delay}}).pan({{keys_melody_left.pan}})
+$: note("{{keys_melody_right.pattern}}").s("sine").gain({{keys_melody_right.volume}}).room({{keys_melody_right.reverb}}).delay({{keys_melody_right.delay}}).pan({{keys_melody_right.pan}})
+$: note("{{keys_chord_right.pattern}}").s("triangle").gain({{keys_chord_right.volume}}).room({{keys_chord_right.reverb}}).delay({{keys_chord_right.delay}}).pan({{keys_chord_right.pan}})
 
 // Drums
-$: s("bd*8").gain({{kick.volume}}).room({{kick.reverb}}).delay({{kick.delay}})
-$: s("~ sd ~ sd").gain({{snare.volume}}).room({{snare.reverb}}).delay({{snare.delay}})
-$: s("hh*16").gain({{hihat.volume}}).room({{hihat.reverb}}).delay({{hihat.delay}})
-$: s("~ ~ lt [~ lt]").gain({{tom.volume}}).room({{tom.reverb}}).delay({{tom.delay}})`;
+$: stack(s("{{drum_kick_left.pattern}}").speed(0.82), s("hh*8").gain(0.22)).gain({{drum_kick_left.volume}}).room({{drum_kick_left.reverb}}).delay({{drum_kick_left.delay}}).pan({{drum_kick_left.pan}})
+$: s("{{drum_snare.pattern}}").gain({{drum_snare.volume}}).room({{drum_snare.reverb}}).delay({{drum_snare.delay}}).pan({{drum_snare.pan}})
+$: s("{{drum_tom.pattern}}").gain({{drum_tom.volume}}).room({{drum_tom.reverb}}).delay({{drum_tom.delay}}).pan({{drum_tom.pan}})
+$: stack(s("{{drum_kick_right.pattern}}").speed(1.16), s("hh*8").gain(0.22)).gain({{drum_kick_right.volume}}).room({{drum_kick_right.reverb}}).delay({{drum_kick_right.delay}}).pan({{drum_kick_right.pan}})
+
+// Bass
+$: note("{{bass_left.pattern}}").s("sawtooth").lpf(180).gain({{bass_left.volume}}).room({{bass_left.reverb}}).delay({{bass_left.delay}}).pan({{bass_left.pan}})
+$: note("{{bass_run_left.pattern}}").s("triangle").lpf(520).gain({{bass_run_left.volume}}).room({{bass_run_left.reverb}}).delay({{bass_run_left.delay}}).pan({{bass_run_left.pan}})
+$: note("{{bass_run_right.pattern}}").s("triangle").lpf(520).gain({{bass_run_right.volume}}).room({{bass_run_right.reverb}}).delay({{bass_run_right.delay}}).pan({{bass_run_right.pan}})
+$: note("{{bass_right.pattern}}").s("sawtooth").lpf(180).gain({{bass_right.volume}}).room({{bass_right.reverb}}).delay({{bass_right.delay}}).pan({{bass_right.pan}})
+
+// Percussion
+$: s("{{perc_shaker_left.pattern}}").gain({{perc_shaker_left.volume}}).room({{perc_shaker_left.reverb}}).delay({{perc_shaker_left.delay}}).pan({{perc_shaker_left.pan}})
+$: s("{{perc_tom.pattern}}").gain({{perc_tom.volume}}).room({{perc_tom.reverb}}).delay({{perc_tom.delay}}).pan({{perc_tom.pan}})
+$: s("{{perc_clave.pattern}}").gain({{perc_clave.volume}}).room({{perc_clave.reverb}}).delay({{perc_clave.delay}}).pan({{perc_clave.pan}})
+$: s("{{perc_shaker_right.pattern}}").gain({{perc_shaker_right.volume}}).room({{perc_shaker_right.reverb}}).delay({{perc_shaker_right.delay}}).pan({{perc_shaker_right.pan}})`;
+const patternModes = {
+  keys_chord_left: {
+    quiet: "c5 ~ [eb5 g5] ~ bb5 ~ [g5 eb5] ~",
+    full: "<[c3,eb3,g3,bb3] ~ [f3,ab3,c4,eb4] ~>",
+  },
+  keys_chord_right: {
+    quiet: "g5 ~ [bb5 c6] ~ eb6 ~ [c6 bb5] ~",
+    full: "<[g3,bb3,c4,eb4] ~ [c4,eb4,f4,ab4] ~>",
+  },
+  keys_melody_left: {
+    quiet: "c5 [~ eb5] ~ [g5 bb5] ~ eb5 ~ [c5 g5]",
+    full: "c4 eb4 g4 bb4",
+  },
+  keys_melody_right: {
+    quiet: "g5 [~ bb5] ~ [c6 eb6] ~ bb5 ~ [g5 c6]",
+    full: "g4 bb4 c5 eb5",
+  },
+  drum_kick_left: {
+    quiet: "bd [~ bd] ~ ~",
+    full: "bd*4",
+  },
+  drum_kick_right: {
+    quiet: "bd [~ bd] ~ ~",
+    full: "bd*4",
+  },
+  drum_snare: {
+    quiet: "~ ~ sd ~",
+    full: "~ sd ~ sd",
+  },
+  drum_tom: {
+    quiet: "~ ~ ~ lt",
+    full: "~ ~ lt [~ lt]",
+  },
+  bass_left: {
+    quiet: "c2 ~ ~ c2",
+    full: "c2 ~ c2 ~",
+  },
+  bass_right: {
+    quiet: "c2 ~ ~ c2",
+    full: "c2 ~ c2 ~",
+  },
+  bass_run_left: {
+    quiet: "~ [g3 eb3] ~ c3",
+    full: "c3 eb3 g3 bb3",
+  },
+  bass_run_right: {
+    quiet: "~ [bb3 g3] ~ eb3",
+    full: "g3 bb3 c4 eb4",
+  },
+  perc_shaker_left: {
+    quiet: "sh*4",
+    full: "sh*8",
+  },
+  perc_shaker_right: {
+    quiet: "sh*4",
+    full: "sh*8",
+  },
+  perc_tom: {
+    quiet: "~ ~ lt ~",
+    full: "~ lt ~ [lt lt]",
+  },
+  perc_clave: {
+    quiet: "~ rim ~ ~",
+    full: "~ rim ~ rim",
+  },
+};
 const interactiveControls = [
   elements.dataset,
   elements.previous,
@@ -199,31 +272,46 @@ function normalizedLight(frame, y, x) {
   return Math.max(0, Math.min(1, (sampleAt(frame, y, x) - dataset.percentile1) / span));
 }
 
+function averageArea(frame, left, bottom, size) {
+  let rawTotal = 0;
+  let normalizedTotal = 0;
+  for (let y = bottom; y < bottom + size; y += 1) {
+    for (let x = left; x < left + size; x += 1) {
+      const value = sampleAt(frame, y, x);
+      rawTotal += value;
+      normalizedTotal += normalizedLight(frame, y, x);
+    }
+  }
+  const sampleCount = size * size;
+  return {
+    raw: rawTotal / sampleCount,
+    normalized: normalizedTotal / sampleCount,
+  };
+}
+
 function patternControlValues(frame) {
   const values = {};
-  instrumentRows.forEach((row, rowIndex) => {
+  instrumentRows.forEach((row) => {
     row.tracks.forEach(([id], columnIndex) => {
-      const blockBottom = height - (rowIndex + 1) * 4;
+      const blockBottom = height - (row.blockRow + 1) * 4;
       const blockLeft = columnIndex * 4;
-      const averageRegion = (left, bottom) => {
-        let total = 0;
-        for (let y = bottom; y < bottom + 2; y += 1) {
-          for (let x = left; x < left + 2; x += 1) {
-            total += normalizedLight(frame, y, x);
-          }
-        }
-        return total / 4;
-      };
-
-      const reverb = averageRegion(blockLeft, blockBottom + 2);
-      const volume = averageRegion(blockLeft + 2, blockBottom + 2);
-      const delay = averageRegion(blockLeft, blockBottom);
-      const density = averageRegion(blockLeft + 2, blockBottom);
+      const blockAverage = averageArea(frame, blockLeft, blockBottom, 4);
+      const reverb = averageArea(frame, blockLeft, blockBottom + 2, 2).normalized;
+      const volume = averageArea(frame, blockLeft + 2, blockBottom + 2, 2).normalized;
+      const delay = averageArea(frame, blockLeft, blockBottom, 2).normalized;
+      const threshold = quietThresholds.get(id) ?? defaultQuietThreshold;
+      const quiet = blockAverage.normalized < threshold;
+      const volumeScale = id === "drum_snare" ? 0.15 : 1;
       values[id] = {
+        average: blockAverage.raw,
+        normalizedAverage: blockAverage.normalized,
+        quiet,
+        threshold,
         reverb: reverb * 0.5,
-        volume: 0.05 + volume * 0.95,
+        volume: (0.05 + volume * 0.95) * (quiet ? 0.18 : 1) * volumeScale,
         delay: delay * 0.5,
-        sparse: 1 - (0.2 + density * 0.8),
+        pan: [0.05, 0.35, 0.65, 0.95][columnIndex],
+        pattern: patternModes[id][quiet ? "quiet" : "full"],
       };
     });
   });
@@ -232,7 +320,7 @@ function patternControlValues(frame) {
 
 function buildPatternGrid() {
   elements.patternGrid.replaceChildren();
-  instrumentRows.forEach((row, rowIndex) => {
+  instrumentRows.forEach((row) => {
     const rowElement = document.createElement("section");
     rowElement.className = "instrument-row";
     const heading = document.createElement("h3");
@@ -250,16 +338,51 @@ function buildPatternGrid() {
       title.textContent = `${columnIndex + 1}. ${label}`;
       const location = document.createElement("p");
       location.className = "pattern-location";
-      const sensorBottom = height - (rowIndex + 1) * 4;
+      const sensorBottom = 16 - (row.blockRow + 1) * 4;
+      const pan = [0.05, 0.35, 0.65, 0.95][columnIndex];
+      const panLabel = pan < 0.5
+        ? `L ${Math.round((0.5 - pan) * 200)}%`
+        : `R ${Math.round((pan - 0.5) * 200)}%`;
       location.textContent =
-        `Detector x=${columnIndex * 4}–${columnIndex * 4 + 3}, y=${sensorBottom}–${sensorBottom + 3}`;
+        `Detector x=${columnIndex * 4}–${columnIndex * 4 + 3}, y=${sensorBottom}–${sensorBottom + 3} · pan ${panLabel}`;
       card.append(title, location);
+
+      const average = document.createElement("p");
+      average.className = "block-average";
+      const mode = document.createElement("p");
+      mode.className = "pattern-state";
+      const thresholdLabel = document.createElement("label");
+      thresholdLabel.className = "threshold-control";
+      thresholdLabel.textContent = "Quiet threshold";
+      const thresholdInput = document.createElement("input");
+      thresholdInput.type = "range";
+      thresholdInput.min = "0";
+      thresholdInput.max = "100";
+      thresholdInput.step = "1";
+      thresholdInput.value = String(Math.round((quietThresholds.get(id) ?? defaultQuietThreshold) * 100));
+      thresholdInput.setAttribute("aria-label", `${label} quiet-mode threshold`);
+      const thresholdValue = document.createElement("output");
+      thresholdValue.textContent = `${thresholdInput.value}%`;
+      thresholdLabel.append(thresholdInput, thresholdValue);
+
+      thresholdInput.addEventListener("input", () => {
+        quietThresholds.set(id, Number(thresholdInput.value) / 100);
+        thresholdValue.textContent = `${thresholdInput.value}%`;
+        refreshPatternGrid();
+      });
+      thresholdInput.addEventListener("change", () => {
+        if (strudelActive) {
+          applyStrudelCode().catch((error) => {
+            showError(error instanceof Error ? error.message : String(error));
+          });
+        }
+      });
+      card.append(average, mode, thresholdLabel);
 
       const controls = [
         ["reverb", "Reverb"],
         ["volume", "Volume"],
         ["delay", "Delay"],
-        ["sparse", "Density"],
       ];
       const controlGrid = document.createElement("div");
       controlGrid.className = "pattern-controls";
@@ -275,6 +398,7 @@ function buildPatternGrid() {
         controlGrid.append(control);
       });
       card.append(controlGrid);
+      quietThresholds.set(id, quietThresholds.get(id) ?? defaultQuietThreshold);
       tracksElement.append(card);
     });
     rowElement.append(tracksElement);
@@ -287,7 +411,17 @@ function refreshPatternGrid() {
   const values = patternControlValues(frameIndex);
   for (const [id, controls] of Object.entries(values)) {
     const card = elements.patternGrid.querySelector(`[data-track="${id}"]`);
+    card.classList.toggle("quiet-mode", controls.quiet);
+    card.querySelector(".block-average").textContent =
+      `4 × 4 mean: ${controls.average.toPrecision(5)} photons · ${Math.round(controls.normalizedAverage * 100)}% normalized`;
+    card.querySelector(".pattern-state").textContent = controls.quiet
+      ? "Quiet pattern"
+      : "Full pattern";
+    const threshold = card.querySelector(".threshold-control");
+    threshold.querySelector("input").value = String(Math.round(controls.threshold * 100));
+    threshold.querySelector("output").textContent = `${Math.round(controls.threshold * 100)}%`;
     for (const [name, value] of Object.entries(controls)) {
+      if (name === "average" || name === "normalizedAverage" || name === "quiet" || name === "threshold" || name === "pan" || name === "pattern") continue;
       const control = card.querySelector(`[data-control="${name}"]`);
       const percent = name === "reverb" || name === "delay"
         ? Math.round(value * 200)
@@ -303,13 +437,13 @@ function refreshPatternGrid() {
 function getEvaluatedStrudelCode() {
   const controls = patternControlValues(frameIndex);
   const code = elements.strudelCode.value.replace(
-    /\{\{([a-z_]+)\.(volume|reverb|delay|sparse)\}\}/g,
+    /\{\{([a-z_]+)\.(volume|reverb|delay|pan|pattern)\}\}/g,
     (placeholder, track, parameter) => {
       const value = controls[track]?.[parameter];
       if (value === undefined) {
         throw new Error(`Unknown Strudel control placeholder: ${placeholder}`);
       }
-      return value.toFixed(3);
+      return parameter === "pattern" ? value : value.toFixed(3);
     },
   );
   const invalidPlaceholder = code.match(/\{\{[^}]*\}\}/);
@@ -696,6 +830,44 @@ function drawExportFrame(ctx, canvas) {
   ctx.drawImage(elements.lightcurve, 620, 120, 548, 400);
 }
 
+function detectorCellFromEvent(event) {
+  const bounds = elements.detector.getBoundingClientRect();
+  const left = 38;
+  const top = 10;
+  const cellSize = Math.min(bounds.width - left - 8, bounds.height - top - 34) / width;
+  const x = Math.floor((event.clientX - bounds.left - left) / cellSize);
+  const displayY = Math.floor((event.clientY - bounds.top - top) / cellSize);
+  const y = height - 1 - displayY;
+  if (x < 0 || x >= width || y < 0 || y >= height) return undefined;
+  return { x, y, cellSize, left, top, bounds };
+}
+
+function showDetectorTooltip(event) {
+  const cell = detectorCellFromEvent(event);
+  if (!cell) {
+    elements.detectorTooltip.hidden = true;
+    return;
+  }
+  const blockRow = Math.floor((height - 1 - cell.y) / 4);
+  const blockColumn = Math.floor(cell.x / 4);
+  const instrument = instrumentRows.find((row) => row.blockRow === blockRow);
+  if (!instrument) {
+    elements.detectorTooltip.textContent = `Pixel x=${cell.x}, y=${cell.y} · no instrument assigned`;
+  } else {
+    const [trackId, trackLabel] = instrument.tracks[blockColumn];
+    const controls = patternControlValues(frameIndex)[trackId];
+    elements.detectorTooltip.textContent =
+      `${instrument.label} · ${trackLabel} · block mean ${controls.average.toPrecision(5)} photons · ${controls.quiet ? "quiet" : "full"} pattern · threshold ${Math.round(controls.threshold * 100)}%`;
+  }
+  const wrapperBounds = elements.detectorTooltip.parentElement.getBoundingClientRect();
+  const cellCenterX = cell.left + (blockColumn * 4 + 2) * cell.cellSize;
+  const cellCenterY = cell.top + (blockRow * 4 + 2) * cell.cellSize;
+  elements.detectorTooltip.style.left =
+    `${Math.max(4, Math.min(wrapperBounds.width - 260, cellCenterX))}px`;
+  elements.detectorTooltip.style.top = `${Math.max(4, cellCenterY)}px`;
+  elements.detectorTooltip.hidden = false;
+}
+
 async function exportAnimation() {
   if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) {
     throw new Error("This browser does not support WebM animation export.");
@@ -908,17 +1080,13 @@ function configureEvents() {
       showError(error instanceof Error ? error.message : String(error));
     }
   });
+  elements.detector.addEventListener("mousemove", showDetectorTooltip);
+  elements.detector.addEventListener("mouseleave", () => {
+    elements.detectorTooltip.hidden = true;
+  });
   elements.detector.addEventListener("click", (event) => {
-    const bounds = elements.detector.getBoundingClientRect();
-    const canvasWidth = bounds.width;
-    const canvasHeight = bounds.height;
-    const left = 38;
-    const top = 10;
-    const cellSize = Math.min(canvasWidth - left - 8, canvasHeight - top - 34) / width;
-    const x = Math.floor((event.clientX - bounds.left - left) / cellSize);
-    const displayY = Math.floor((event.clientY - bounds.top - top) / cellSize);
-    const y = height - 1 - displayY;
-    if (x >= 0 && x < width && y >= 0 && y < height) selectPixel(x, y);
+    const cell = detectorCellFromEvent(event);
+    if (cell) selectPixel(cell.x, cell.y);
   });
   elements.lightcurve.addEventListener("click", (event) => {
     const bounds = elements.lightcurve.getBoundingClientRect();

@@ -203,6 +203,27 @@ select:focus-visible {
   cursor: crosshair;
 }
 
+.detector-canvas-wrap {
+  position: relative;
+  width: min(100%, 600px);
+  margin: 0 auto;
+}
+
+.detector-tooltip {
+  position: absolute;
+  z-index: 2;
+  max-width: min(260px, 90%);
+  padding: 8px 10px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: rgba(12, 17, 24, 0.96);
+  color: #edf2f7;
+  font-size: 0.76rem;
+  line-height: 1.4;
+  pointer-events: none;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
 #lightcurve {
   display: block;
   width: 100%;
@@ -276,6 +297,11 @@ select:focus-visible {
   background: #141c26;
 }
 
+.pattern-card.quiet-mode {
+  border-color: #b98c4a;
+  background: #211e19;
+}
+
 .pattern-card h4 {
   overflow: hidden;
   margin: 0 0 3px;
@@ -285,9 +311,50 @@ select:focus-visible {
 }
 
 .pattern-location {
-  margin: 0 0 9px;
+  min-height: 2.2em;
+  margin: 0 0 8px;
   color: var(--muted);
   font-size: 0.68rem;
+}
+
+.block-average {
+  margin: 0 0 5px;
+  color: #d8e4ef;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.pattern-state {
+  margin: 0 0 7px;
+  color: var(--accent);
+  font-size: 0.73rem;
+  font-weight: 700;
+}
+
+.quiet-mode .pattern-state {
+  color: #f2bd6b;
+}
+
+.threshold-control {
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 9px;
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.threshold-control input {
+  width: 100%;
+  min-height: 20px;
+  padding: 0;
+}
+
+.threshold-control output {
+  min-width: 34px;
+  color: #edf2f7;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 .pattern-controls {
