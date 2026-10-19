@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Detector data explorer</title>
+    <link rel="stylesheet" href="style.css">
+    <script type="module" src="app.js"></script>
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="eyebrow">16 × 16 detector · live Strudel composition</p>
+        <h1>Detector data explorer</h1>
+        <p class="intro">Browse detector frames and use their live light levels to shape a four-part house composition.</p>
+      </header>
+
+      <section class="toolbar" aria-label="Dataset and playback controls">
+        <label class="dataset-control">
+          Dataset
+          <select id="dataset"></select>
+        </label>
+        <div class="transport">
+          <button id="previous" type="button">Previous</button>
+          <button id="play" type="button">Play</button>
+          <button id="stop" type="button">Stop</button>
+          <button id="next" type="button">Next</button>
+          <label>Frame <input id="frame-number" type="number" min="0" value="0"></label>
+        </div>
+        <label class="frame-slider">Frame <input id="frame-slider" type="range" min="0" max="0" value="0"></label>
+      </section>
+
+      <section class="range-controls" aria-label="Playback settings">
+        <label>Start frame <input id="start-frame" type="number" min="0" value="0"></label>
+        <label>End frame <input id="end-frame" type="number" min="0" value="0"></label>
+        <label class="speed-control">Frame interval <input id="speed" type="range" min="20" max="1000" step="10" value="100"><output id="speed-label">100 ms</output></label>
+        <button id="all-curves" type="button" aria-pressed="false">Show all lightcurves</button>
+        <button id="export-animation" type="button">Export range as WebM</button>
+      </section>
+
+      <p id="status" role="status" aria-live="polite">Loading datasets…</p>
+      <p id="error" class="error" role="alert" hidden></p>
+
+      <div class="visualizations">
+        <section class="panel detector-panel">
+          <div class="panel-heading">
+            <div>
+              <h2 id="frame-title">Detector frame</h2>
+              <p id="pixel-readout">Select a detector pixel</p>
+            </div>
+            <div class="color-scale" aria-label="Color scale">
+              <span id="scale-min"></span>
+              <span class="viridis-gradient"></span>
+              <span id="scale-max"></span>
+            </div>
+          </div>
+          <canvas id="detector" aria-label="Detector heatmap; click a pixel to select it"></canvas>
+        </section>
+
+        <section class="panel lightcurve-panel">
+          <div class="panel-heading">
+            <div>
+              <h2>Pixel lightcurve</h2>
+              <p>Click the plot to seek to a frame.</p>
+            </div>
+          </div>
+          <canvas id="lightcurve" aria-label="Selected pixel photon counts over frames"></canvas>
+        </section>
+      </div>
+
+      <section id="all-curves-panel" class="panel all-curves-panel" hidden>
+        <div class="panel-heading">
+          <div>
+            <h2>All detector lightcurves</h2>
+            <p>Each line represents one detector pixel.</p>
+          </div>
+        </div>
+        <canvas id="all-curves-chart" aria-label="Lightcurves for all detector pixels"></canvas>
+      </section>
+
+      <section class="panel music-panel">
+        <div class="panel-heading">
+          <div>
+            <h2>Strudel pattern grid</h2>
+            <p>Each 4 × 4 detector block is one pattern: top-left reverb · top-right volume · bottom-left delay · bottom-right density.</p>
+          </div>
+          <div class="strudel-actions">
+            <button id="strudel-start" type="button" disabled>Start Strudel</button>
+            <button id="strudel-update" type="button" disabled>Apply current frame</button>
+            <button id="strudel-stop" type="button" disabled>Stop Strudel</button>
+          </div>
+        </div>
+        <p id="strudel-status" role="status" aria-live="polite">Strudel is not running.</p>
+        <div id="pattern-grid" class="pattern-grid" aria-label="Sixteen Strudel patterns and their live controls"></div>
+        <details class="code-details">
+          <summary>Strudel script — edit patterns</summary>
+          <p>Edit the pattern expressions below, keeping the control placeholders if you want detector-driven controls. While Strudel is playing, code edits are applied live.</p>
+          <textarea id="strudel-code" spellcheck="false" aria-label="Editable Strudel pattern script"></textarea>
+        </details>
+      </section>
+
+      <footer>
+        <p>Audio starts only after you press <strong>Start Strudel</strong>. Detector brightness maps to volume, reverb, delay, and note density; the four effects are limited to safe musical ranges.</p>
+      </footer>
+    </main>
+  </body>
+</html>

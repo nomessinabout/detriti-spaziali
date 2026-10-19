@@ -1,0 +1,36 @@
+{
+  "datasets": [
+    {
+      "id": "L1__2026_07_06__13_42_41__LED155V_lensreduction_rotation_10min_WORKING_mediana.npy",
+      "label": "L1__2026_07_06__13_42_41__LED155V_lensreduction_rotation_10min_WORKING_mediana.npy",
+      "source": "L1__2026_07_06__13_42_41__LED155V_lensreduction_rotation_10min_WORKING_mediana.npy",
+      "dataFile": "data/L1__2026_07_06__13_42_41__LED155V_lensreduction_rotation_10min_WORKING_mediana.f32",
+      "shape": [
+        11400,
+        16,
+        16
+      ],
+      "dtype": "float32",
+      "byteOrder": "little-endian",
+      "byteLength": 11673600,
+      "percentile1": 0.0,
+      "percentile99": 3.937084913253784
+    },
+    {
+      "id": "L1__2026_07_16__10_08_25__600s__detector_event_bkg15p5_meteor9_mediana.npy",
+      "label": "L1__2026_07_16__10_08_25__600s__detector_event_bkg15p5_meteor9_mediana.npy",
+      "source": "L1__2026_07_16__10_08_25__600s__detector_event_bkg15p5_meteor9_mediana.npy",
+      "dataFile": "data/L1__2026_07_16__10_08_25__600s__detector_event_bkg15p5_meteor9_mediana.f32",
+      "shape": [
+        1000,
+        16,
+        16
+      ],
+      "dtype": "float32",
+      "byteOrder": "little-endian",
+      "byteLength": 1024000,
+      "percentile1": 0.9847774505615234,
+      "percentile99": 1.1294469833374023
+    }
+  ]
+}
