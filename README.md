@@ -48,7 +48,7 @@ Then open <http://localhost:8000> in a browser.
 - The 2 × 2 top-left, top-right, and bottom-left sub-quadrants set **Reverb** (up to 50%), **Volume** (5–100%), and **Delay** (up to 50%). Density/sparsity is intentionally not used in the Strudel patterns.
 - Pattern columns are panned left-to-right at 90% left, 30% left, 30% right, and 90% right. The outer blocks are therefore strongly separated in stereo; the two middle blocks sit nearer the center.
 - Hover over the detector heatmap for the instrument, part, block average, and quiet/full state assigned to that 4 × 4 region.
-- Instrument rows follow the detector from top to bottom: keys, drums, bass, percussion. Each uses four distinct parts. The bass has matching left/right low pulses and two higher, complementary runs in the middle; percussion includes stereo shakers, tom accents, and clave/rim.
+- Instrument rows follow the detector from top to bottom: keys, drums, bass, percussion. Each uses four distinct parts. The bass has matching left/right low pulses and two higher, complementary runs in the middle; percussion includes stereo closed-hi-hat shaker textures, tom accents, and rimshots.
 - While Strudel is running, the active script is re-evaluated at most twice per second with current detector controls. **Apply current frame** immediately applies the currently displayed frame.
 
 There are four patterns per instrument row. The drums put a low kick with hi-hat on the left, snare and tom in the center, and a higher kick with hi-hat on the right. Both kicks share the same quiet heartbeat (`bd [~ bd] ~ ~`) and full four-on-the-floor (`bd*4`) rhythms, with different playback speeds and stereo positions. The snare has an additional 15% gain multiplier to keep it behind the kick. The keys put matching chord progressions with different inversions on the outer blocks and a structurally matching, chord-tone melody across the inner pair. Quiet keys switch to quiet, scattered high-register phrases.
@@ -61,7 +61,7 @@ Open **Strudel script — edit patterns**. Each line beginning with `$:` is a no
 $: stack(s("{{drum_kick_left.pattern}}").speed(0.82), s("hh*8").gain(0.22)).gain({{drum_kick_left.volume}}).room({{drum_kick_left.reverb}}).delay({{drum_kick_left.delay}}).pan({{drum_kick_left.pan}})
 ```
 
-The bundled Strudel web runtime is loaded from esm.sh at version 1.3.0; its starter drum samples are loaded from the public `tidalcycles/dirt-samples` repository. Starting Strudel therefore requires an internet connection. The editable starter script is in `app.js` as `patternTemplate`; quiet/full note patterns are in `patternModes`. Change those defaults if you want your revised arrangement to be the new starter. You can also copy the generated script from the browser into <https://strudel.cc/> to experiment there.
+The bundled Strudel web runtime is loaded from esm.sh at version 1.3.0; its starter drum samples are loaded from the public `tidalcycles/dirt-samples` repository. Starting Strudel therefore requires an internet connection. The sample set has no `sh` or `rim` groups: the shaker parts use the available `hh` closed-hi-hat samples, and the rim part uses the available `rs` rimshot sample. The editable starter script is in `app.js` as `patternTemplate`; quiet/full note patterns are in `patternModes`. Change those defaults if you want your revised arrangement to be the new starter. You can also copy the generated script from the browser into <https://strudel.cc/> to experiment there.
 
 ## Code layout
 

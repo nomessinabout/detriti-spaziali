@@ -43,7 +43,7 @@ const colorStops = [
   [253, 231, 37],
 ];
 const littleEndian = new Uint8Array(new Uint16Array([1]).buffer)[0] === 1;
-const defaultQuietThreshold = 0.3;
+const defaultQuietThreshold = 0.28;
 const quietThresholds = new Map();
 const instrumentRows = [
   {
@@ -80,10 +80,10 @@ const instrumentRows = [
     label: "Percussion",
     blockRow: 3,
     tracks: [
-      ["perc_shaker_left", "Left shaker"],
+      ["perc_shaker_left", "Left shaker / closed hat"],
       ["perc_tom", "Tom accents"],
-      ["perc_clave", "Clave / rim"],
-      ["perc_shaker_right", "Right shaker"],
+      ["perc_clave", "Rimshot"],
+      ["perc_shaker_right", "Right shaker / closed hat"],
     ],
   },
 ];
@@ -162,20 +162,20 @@ const patternModes = {
     full: "g3 bb3 c4 eb4",
   },
   perc_shaker_left: {
-    quiet: "sh*4",
-    full: "sh*8",
+    quiet: "hh*4",
+    full: "hh*8",
   },
   perc_shaker_right: {
-    quiet: "sh*4",
-    full: "sh*8",
+    quiet: "hh*4",
+    full: "hh*8",
   },
   perc_tom: {
     quiet: "~ ~ lt ~",
     full: "~ lt ~ [lt lt]",
   },
   perc_clave: {
-    quiet: "~ rim ~ ~",
-    full: "~ rim ~ rim",
+    quiet: "~ rs ~ ~",
+    full: "~ rs ~ rs",
   },
 };
 const interactiveControls = [
