@@ -23,6 +23,7 @@ const voices = [
   { name: "C4", frequency: 261.6256, left: 0, bottom: 0, x: -1.2, z: 1 },
   { name: "G4", frequency: 391.9954, left: 8, bottom: 0, x: 1.2, z: 1 },
 ];
+const screenQuadrants = [2, 3, 0, 1];
 const canvas = document.querySelector("#detector");
 const playButton = document.querySelector("#play");
 const stopButton = document.querySelector("#stop");
@@ -40,6 +41,10 @@ let audioContext;
 let audioVoices = [];
 let playbackTimer;
 let playing = false;
+let enabledVoices = voices.map(() => true);
+let hoveredQuadrant = -1;
+let focusedQuadrant = 0;
+let keyboardFocused = false;
 
 function showError(message) {
   errorMessage.textContent = message;
@@ -67,13 +72,17 @@ function averageArea(frame, left, bottom, width, height) {
   return total / (width * height);
 }
 
-function colorFor(value) {
+function colorFor(value, grayscale = false) {
   const scaled = normalized(value) * (colorStops.length - 1);
   const lower = Math.floor(scaled);
   const upper = Math.min(colorStops.length - 1, lower + 1);
   const blend = scaled - lower;
   const channels = colorStops[lower].map((channel, index) =>
     Math.round(channel + (colorStops[upper][index] - channel) * blend));
+  if (grayscale) {
+    const luminance = Math.round(channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722);
+    return `rgb(${luminance}, ${luminance}, ${luminance})`;
+  }
   return `rgb(${channels.join(",")})`;
 }
 
@@ -97,7 +106,8 @@ function drawFrame() {
   ctx.clearRect(0, 0, size, size);
   for (let y = 0; y < gridSize; y += 1) {
     for (let x = 0; x < gridSize; x += 1) {
-      ctx.fillStyle = colorFor(sampleAt(frameIndex, y, x));
+      const voiceIndex = (y < gridSize / 2 ? 0 : 2) + (x < gridSize / 2 ? 0 : 1);
+      ctx.fillStyle = colorFor(sampleAt(frameIndex, y, x), !enabledVoices[voiceIndex]);
       ctx.fillRect(x * cellSize, (gridSize - 1 - y) * cellSize, cellSize, cellSize);
     }
   }
@@ -122,6 +132,37 @@ function drawFrame() {
   ctx.moveTo(0, size / 2);
   ctx.lineTo(size, size / 2);
   ctx.stroke();
+  const highlightedQuadrant = hoveredQuadrant >= 0
+    ? hoveredQuadrant
+    : keyboardFocused
+      ? focusedQuadrant
+      : -1;
+  if (highlightedQuadrant >= 0) {
+    const screenSlot = screenQuadrants.indexOf(highlightedQuadrant);
+    const column = screenSlot % 2;
+    const row = Math.floor(screenSlot / 2);
+    const left = column * size / 2;
+    const top = row * size / 2;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(left, top, size / 2, size / 2);
+    ctx.clip();
+    ctx.strokeStyle = "#5eead4";
+    ctx.lineWidth = Math.max(1, size / 320);
+    for (let grid = 0; grid <= gridSize; grid += 1) {
+      const position = grid * cellSize;
+      ctx.beginPath();
+      ctx.moveTo(position, 0);
+      ctx.lineTo(position, size);
+      ctx.moveTo(0, position);
+      ctx.lineTo(size, position);
+      ctx.stroke();
+    }
+    ctx.restore();
+    ctx.strokeStyle = "#5eead4";
+    ctx.lineWidth = Math.max(1.5, size / 240);
+    ctx.strokeRect(left + 1, top + 1, size / 2 - 2, size / 2 - 2);
+  }
   ctx.restore();
 }
 
@@ -158,9 +199,39 @@ function updateAudio(frame) {
     const { oscillator, gain, companion, companionGain } = audioVoices[index];
     oscillator.frequency.setTargetAtTime(controls.frequency, now, attackTime);
     companion.frequency.setTargetAtTime(controls.companionFrequency, now, attackTime);
-    gain.gain.setTargetAtTime(controls.gain, now, attackTime);
-    companionGain.gain.setTargetAtTime(controls.companionGain, now, attackTime);
+    gain.gain.setTargetAtTime(enabledVoices[index] ? controls.gain : 0, now, attackTime);
+    companionGain.gain.setTargetAtTime(
+      enabledVoices[index] ? controls.companionGain : 0,
+      now,
+      attackTime,
+    );
   });
+}
+
+function updateGridLabel() {
+  const states = voices.map((voice, index) =>
+    `${voice.name} ${enabledVoices[index] ? "on" : "off"}`);
+  canvas.setAttribute(
+    "aria-label",
+    `Interactive photon grid. Click a quadrant to toggle its tone. Use arrow keys to select a quadrant, then Enter or Space to toggle it. ${states.join(", ")}.`,
+  );
+}
+
+function toggleQuadrant(index) {
+  enabledVoices[index] = !enabledVoices[index];
+  drawFrame();
+  updateAudio(frameIndex);
+  updateGridLabel();
+  status.textContent = `${voices[index].name} ${enabledVoices[index] ? "on" : "off"}`;
+}
+
+function quadrantAt(event) {
+  const bounds = canvas.getBoundingClientRect();
+  const x = (event.clientX - bounds.left) / bounds.width;
+  const y = (event.clientY - bounds.top) / bounds.height;
+  if (x < 0 || x > 1 || y < 0 || y > 1) return -1;
+  const screenSlot = (y < 0.5 ? 0 : 2) + (x < 0.5 ? 0 : 1);
+  return screenQuadrants[screenSlot];
 }
 
 function createAudio() {
@@ -300,6 +371,7 @@ async function initialize() {
     frameDurationSeconds = datasetDurationMs / 1000 / frameCount;
     percentile1 = metadata.percentile1;
     percentile99 = metadata.percentile99;
+    updateGridLabel();
     drawFrame();
     playButton.disabled = false;
     status.textContent = `${frameCount.toLocaleString()} frames · 16 × 16 grid`;
@@ -310,6 +382,47 @@ async function initialize() {
 
 playButton.addEventListener("click", startPlayback);
 stopButton.addEventListener("click", stopPlayback);
+canvas.addEventListener("pointermove", (event) => {
+  const quadrant = quadrantAt(event);
+  if (hoveredQuadrant === quadrant) return;
+  hoveredQuadrant = quadrant;
+  drawFrame();
+});
+canvas.addEventListener("pointerleave", () => {
+  hoveredQuadrant = -1;
+  drawFrame();
+});
+canvas.addEventListener("click", (event) => {
+  const quadrant = quadrantAt(event);
+  if (quadrant >= 0) toggleQuadrant(quadrant);
+});
+canvas.addEventListener("focus", () => {
+  keyboardFocused = true;
+  drawFrame();
+});
+canvas.addEventListener("blur", () => {
+  keyboardFocused = false;
+  drawFrame();
+});
+canvas.addEventListener("keydown", (event) => {
+  const screenSlot = screenQuadrants.indexOf(focusedQuadrant);
+  let column = screenSlot % 2;
+  let row = Math.floor(screenSlot / 2);
+  if (event.key === "ArrowLeft") column = Math.max(0, column - 1);
+  else if (event.key === "ArrowRight") column = Math.min(1, column + 1);
+  else if (event.key === "ArrowUp") row = Math.max(0, row - 1);
+  else if (event.key === "ArrowDown") row = Math.min(1, row + 1);
+  else if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    toggleQuadrant(focusedQuadrant);
+    return;
+  } else {
+    return;
+  }
+  event.preventDefault();
+  focusedQuadrant = screenQuadrants[row * 2 + column];
+  drawFrame();
+});
 window.addEventListener("resize", drawFrame);
 window.addEventListener("pagehide", stopPlayback);
 initialize();

@@ -47,6 +47,12 @@ h1 {
   width: 100%;
   aspect-ratio: 1;
   border-radius: 2px;
+  cursor: pointer;
+}
+
+#detector:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
 }
 
 .transport {

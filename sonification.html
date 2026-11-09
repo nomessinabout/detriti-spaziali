@@ -14,7 +14,12 @@
         <h1>Detector sonification</h1>
       </header>
       <section class="sonification" aria-label="10-minute detector sonification">
-        <canvas id="detector" aria-label="Animated 16 by 16 photon intensity grid"></canvas>
+        <canvas
+          id="detector"
+          role="group"
+          tabindex="0"
+          aria-label="Interactive photon grid. Click a quadrant to toggle its tone. Use arrow keys to select a quadrant, then Enter or Space to toggle it."
+        ></canvas>
         <div class="transport" aria-label="Audio playback">
           <button id="play" type="button" disabled>Play</button>
           <button id="stop" type="button" disabled>Stop</button>
