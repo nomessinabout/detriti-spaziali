@@ -2,7 +2,10 @@ const datasetId = "L1__2026_07_06__13_42_41__LED155V_lensreduction_rotation_10mi
 const gridSize = 16;
 const datasetDurationMs = 10 * 60 * 1000;
 const threshold = 0.3;
-const maxPitchShiftCents = 24;
+const maxPitchShiftCents = 90;
+const maxBeatFrequency = 12;
+const attackTime = 0.035;
+const releaseTime = 0.9;
 const colorStops = [
   [68, 1, 84],
   [72, 40, 120],
@@ -15,10 +18,10 @@ const colorStops = [
   [253, 231, 37],
 ];
 const voices = [
-  { name: "C3", frequency: 130.8128, left: 0, bottom: 8, x: -0.75, y: 0.25, z: -0.55 },
-  { name: "G3", frequency: 195.9977, left: 8, bottom: 8, x: 0.75, y: 0.25, z: -0.55 },
-  { name: "C4", frequency: 261.6256, left: 0, bottom: 0, x: -0.75, y: -0.25, z: -0.55 },
-  { name: "G4", frequency: 391.9954, left: 8, bottom: 0, x: 0.75, y: -0.25, z: -0.55 },
+  { name: "C3", frequency: 130.8128, left: 0, bottom: 8, x: -1.2, z: -1 },
+  { name: "G3", frequency: 195.9977, left: 8, bottom: 8, x: 1.2, z: -1 },
+  { name: "C4", frequency: 261.6256, left: 0, bottom: 0, x: -1.2, z: 1 },
+  { name: "G4", frequency: 391.9954, left: 8, bottom: 0, x: 1.2, z: 1 },
 ];
 const canvas = document.querySelector("#detector");
 const playButton = document.querySelector("#play");
@@ -29,6 +32,7 @@ const littleEndian = new Uint8Array(new Uint16Array([1]).buffer)[0] === 1;
 
 let samples;
 let frameCount = 0;
+let frameDurationSeconds = datasetDurationMs / 1000 / 11400;
 let frameIndex = 0;
 let percentile1 = 0;
 let percentile99 = 1;
@@ -121,16 +125,28 @@ function drawFrame() {
   ctx.restore();
 }
 
-function voiceControls(frame, voice) {
+function voiceControls(frame, voice, state) {
   const lower = averageArea(frame, voice.left, voice.bottom, 8, 4);
   const upper = averageArea(frame, voice.left, voice.bottom + 4, 8, 4);
   const mean = (upper + lower) / 2;
   const upward = Math.max(0, (upper - threshold) / (1 - threshold));
   const downward = Math.max(0, (lower - threshold) / (1 - threshold));
-  const cents = (upward - downward) * maxPitchShiftCents;
+  const smooth = (current, target) => {
+    const time = target > current ? attackTime : releaseTime;
+    const amount = 1 - Math.exp(-frameDurationSeconds / time);
+    return current + (target - current) * amount;
+  };
+  state.upperActivity = smooth(state.upperActivity, upward);
+  state.lowerActivity = smooth(state.lowerActivity, downward);
+  state.intensity = smooth(state.intensity, mean);
+  const activity = Math.max(state.upperActivity, state.lowerActivity);
+  const cents = (state.upperActivity - state.lowerActivity) * maxPitchShiftCents;
+  const gain = 0.035 + state.intensity * 0.18;
   return {
     frequency: voice.frequency * 2 ** (cents / 1200),
-    gain: mean * 0.12,
+    companionFrequency: voice.frequency * 2 ** (cents / 1200) + activity * maxBeatFrequency,
+    gain,
+    companionGain: gain * activity * 0.55,
   };
 }
 
@@ -138,33 +154,57 @@ function updateAudio(frame) {
   if (!audioContext || !audioVoices.length) return;
   const now = audioContext.currentTime;
   voices.forEach((voice, index) => {
-    const controls = voiceControls(frame, voice);
-    const { oscillator, gain } = audioVoices[index];
-    oscillator.frequency.setTargetAtTime(controls.frequency, now, 0.08);
-    gain.gain.setTargetAtTime(controls.gain, now, 0.08);
+    const controls = voiceControls(frame, voice, audioVoices[index]);
+    const { oscillator, gain, companion, companionGain } = audioVoices[index];
+    oscillator.frequency.setTargetAtTime(controls.frequency, now, attackTime);
+    companion.frequency.setTargetAtTime(controls.companionFrequency, now, attackTime);
+    gain.gain.setTargetAtTime(controls.gain, now, attackTime);
+    companionGain.gain.setTargetAtTime(controls.companionGain, now, attackTime);
   });
 }
 
 function createAudio() {
   audioContext = new AudioContext();
+  const compressor = audioContext.createDynamicsCompressor();
+  compressor.threshold.value = -12;
+  compressor.knee.value = 6;
+  compressor.ratio.value = 8;
+  compressor.attack.value = 0.003;
+  compressor.release.value = 0.15;
+  compressor.connect(audioContext.destination);
   audioVoices = voices.map((voice) => {
     const oscillator = audioContext.createOscillator();
     const gain = audioContext.createGain();
+    const companion = audioContext.createOscillator();
+    const companionGain = audioContext.createGain();
     const panner = audioContext.createPanner();
     oscillator.type = "sine";
+    companion.type = "sine";
     oscillator.frequency.value = voice.frequency;
+    companion.frequency.value = voice.frequency;
     panner.panningModel = "HRTF";
     panner.distanceModel = "inverse";
     panner.refDistance = 1;
     panner.maxDistance = 1;
     panner.rolloffFactor = 0;
     panner.positionX.value = voice.x;
-    panner.positionY.value = voice.y;
     panner.positionZ.value = voice.z;
     gain.gain.value = 0;
-    oscillator.connect(gain).connect(panner).connect(audioContext.destination);
+    companionGain.gain.value = 0;
+    oscillator.connect(gain).connect(panner);
+    companion.connect(companionGain).connect(panner);
+    panner.connect(compressor);
     oscillator.start();
-    return { oscillator, gain };
+    companion.start();
+    return {
+      oscillator,
+      gain,
+      companion,
+      companionGain,
+      upperActivity: 0,
+      lowerActivity: 0,
+      intensity: 0,
+    };
   });
   updateAudio(frameIndex);
 }
@@ -204,9 +244,11 @@ function stopPlayback() {
   playing = false;
   if (audioContext && audioVoices.length) {
     const now = audioContext.currentTime;
-    for (const { gain } of audioVoices) {
+    for (const { gain, companionGain } of audioVoices) {
       gain.gain.cancelScheduledValues(now);
       gain.gain.setTargetAtTime(0, now, 0.035);
+      companionGain.gain.cancelScheduledValues(now);
+      companionGain.gain.setTargetAtTime(0, now, 0.035);
     }
   }
   stopButton.disabled = true;
@@ -255,6 +297,7 @@ async function initialize() {
       throw new Error("Sample count does not match the dataset manifest.");
     }
     samples = nextSamples;
+    frameDurationSeconds = datasetDurationMs / 1000 / frameCount;
     percentile1 = metadata.percentile1;
     percentile99 = metadata.percentile99;
     drawFrame();

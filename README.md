@@ -39,7 +39,7 @@ Then open <http://localhost:8000> in a browser.
 
 Open <http://localhost:8000/sonification.html> for a minimal player that loads only the 10-minute dataset. Press **Play** to animate its 16 × 16 grid and hear four continuous sine tones, one per quadrant; press **Stop** to mute and pause.
 
-Each quadrant's mean normalized photon intensity controls its tone's volume. A bright upper half nudges the tone upward, while a bright lower half nudges it downward; the small, smoothed detuning creates beating between the voices. The four notes are C3, G3, C4, and G4. Their positions use the browser's native Web Audio HRTF panner for headphone-oriented binaural spatialization, so no additional audio library or external download is required. Audio begins only after the user presses **Play**.
+Each quadrant's mean normalized photon intensity controls its tone's volume. A bright upper half nudges the tone upward, while a bright lower half nudges it downward. Each of the four spatial voices uses a quiet, closely detuned companion sine wave: its frequency separation and level rise with photon activity to create audible beating, then decay slowly when the signal dims. The response has a fast attack and a slower release. The four notes are C3, G3, C4, and G4. Their positions use left/right and front/back HRTF placement, making the quadrant voices easier to distinguish on headphones. Audio begins only after the user presses **Play**.
 
 ## Use the viewer and Strudel
 
