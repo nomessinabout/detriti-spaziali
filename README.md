@@ -35,6 +35,12 @@ python3 -m http.server 8000
 
 Then open <http://localhost:8000> in a browser.
 
+## 10-minute spatial sonification
+
+Open <http://localhost:8000/sonification.html> for a minimal player that loads only the 10-minute dataset. Press **Play** to animate its 16 × 16 grid and hear four continuous sine tones, one per quadrant; press **Stop** to mute and pause.
+
+Each quadrant's mean normalized photon intensity controls its tone's volume. A bright upper half nudges the tone upward, while a bright lower half nudges it downward; the small, smoothed detuning creates beating between the voices. The four notes are C3, G3, C4, and G4. Their positions use the browser's native Web Audio HRTF panner for headphone-oriented binaural spatialization, so no additional audio library or external download is required. Audio begins only after the user presses **Play**.
+
 ## Use the viewer and Strudel
 
 - Choose either dataset, navigate frames, and click or drag the frame slider.
@@ -68,4 +74,5 @@ The bundled Strudel web runtime is loaded from esm.sh at version 1.3.0; its star
 - `convert_npy.py` prepares binary data and its JSON manifest.
 - `app.js` loads the float32 samples, computes block and quadrant averages, draws the heatmap and plots, controls playback, and runs the stereo Strudel patterns.
 - `index.html` and `style.css` provide the browser UI.
+- `sonification.html`, `sonification.css`, and `sonification.js` provide the minimal 10-minute, four-voice HRTF sonification player.
 - `visualize.py` is the original Python/Matplotlib implementation.
