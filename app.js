@@ -1,34 +1,19 @@
 const elements = {
   dataset: document.querySelector("#dataset"),
-  previous: document.querySelector("#previous"),
   play: document.querySelector("#play"),
   stop: document.querySelector("#stop"),
-  next: document.querySelector("#next"),
-  frameNumber: document.querySelector("#frame-number"),
   frameSlider: document.querySelector("#frame-slider"),
-  startFrame: document.querySelector("#start-frame"),
-  endFrame: document.querySelector("#end-frame"),
-  speed: document.querySelector("#speed"),
-  speedLabel: document.querySelector("#speed-label"),
-  allCurves: document.querySelector("#all-curves"),
-  exportAnimation: document.querySelector("#export-animation"),
-  strudelStart: document.querySelector("#strudel-start"),
-  strudelUpdate: document.querySelector("#strudel-update"),
-  strudelStop: document.querySelector("#strudel-stop"),
-  strudelStatus: document.querySelector("#strudel-status"),
-  patternGrid: document.querySelector("#pattern-grid"),
-  strudelCode: document.querySelector("#strudel-code"),
+  frameLabel: document.querySelector("#frame-label"),
+  patternOverlay: document.querySelector("#pattern-overlay"),
+  visualizer: document.querySelector(".visualizer"),
+  controls: document.querySelector(".controls"),
+  detectorWrap: document.querySelector(".detector-wrap"),
+  frameControl: document.querySelector(".frame-slider"),
   status: document.querySelector("#status"),
+  audioStatus: document.querySelector("#audio-status"),
   error: document.querySelector("#error"),
-  frameTitle: document.querySelector("#frame-title"),
-  pixelReadout: document.querySelector("#pixel-readout"),
-  scaleMin: document.querySelector("#scale-min"),
-  scaleMax: document.querySelector("#scale-max"),
   detector: document.querySelector("#detector"),
   detectorTooltip: document.querySelector("#detector-tooltip"),
-  lightcurve: document.querySelector("#lightcurve"),
-  allCurvesPanel: document.querySelector("#all-curves-panel"),
-  allCurvesChart: document.querySelector("#all-curves-chart"),
 };
 
 const colorStops = [
@@ -50,40 +35,40 @@ const instrumentRows = [
     label: "Keys / synth",
     blockRow: 0,
     tracks: [
-      ["keys_chord_left", "Left chord voicing"],
-      ["keys_melody_left", "Left melody"],
-      ["keys_melody_right", "Right melody"],
-      ["keys_chord_right", "Right chord voicing"],
+      ["keys_chord_left", "Chord L"],
+      ["keys_melody_left", "Melody L"],
+      ["keys_melody_right", "Melody R"],
+      ["keys_chord_right", "Chord R"],
     ],
   },
   {
     label: "Drums",
     blockRow: 1,
     tracks: [
-      ["drum_kick_left", "Low kick + hi-hat"],
+      ["drum_kick_left", "Kick L"],
       ["drum_snare", "Snare"],
-      ["drum_tom", "Tom fill"],
-      ["drum_kick_right", "High kick + hi-hat"],
+      ["drum_tom", "Tom"],
+      ["drum_kick_right", "Kick R"],
     ],
   },
   {
     label: "Bass",
     blockRow: 2,
     tracks: [
-      ["bass_left", "Left bass pulse"],
-      ["bass_run_left", "Bass run 1"],
-      ["bass_run_right", "Bass run 2"],
-      ["bass_right", "Right bass pulse"],
+      ["bass_left", "Bass L"],
+      ["bass_run_left", "Run L"],
+      ["bass_run_right", "Run R"],
+      ["bass_right", "Bass R"],
     ],
   },
   {
     label: "Percussion",
     blockRow: 3,
     tracks: [
-      ["perc_shaker_left", "Left shaker / closed hat"],
-      ["perc_tom", "Tom accents"],
+      ["perc_shaker_left", "Shaker L"],
+      ["perc_tom", "Tom"],
       ["perc_clave", "Rimshot"],
-      ["perc_shaker_right", "Right shaker / closed hat"],
+      ["perc_shaker_right", "Shaker R"],
     ],
   },
 ];
@@ -178,23 +163,8 @@ const patternModes = {
     full: "~ rs ~ rs",
   },
 };
-const interactiveControls = [
-  elements.dataset,
-  elements.previous,
-  elements.play,
-  elements.stop,
-  elements.next,
-  elements.frameNumber,
-  elements.frameSlider,
-  elements.startFrame,
-  elements.endFrame,
-  elements.speed,
-  elements.allCurves,
-  elements.exportAnimation,
-  elements.strudelStart,
-  elements.strudelUpdate,
-  elements.strudelStop,
-];
+const frameIntervalMs = 100;
+const interactiveControls = [elements.dataset, elements.play, elements.stop, elements.frameSlider, elements.patternOverlay];
 for (const control of interactiveControls) control.disabled = true;
 
 let dataset;
@@ -203,19 +173,13 @@ let frameCount = 0;
 let width = 0;
 let height = 0;
 let frameIndex = 0;
-let rangeStart = 0;
-let rangeEnd = 0;
-let selectedPixel = { x: 8, y: 8 };
-let selectedLightcurve = [];
-let lightcurveBounds = { min: 0, max: 1 };
 let playbackTimer;
-let showAllCurves = false;
+let showPatternOverlay = false;
 let strudel;
 let strudelLoadPromise;
-let strudelLoadFailed = false;
 let strudelActive = false;
+let strudelStarting = false;
 let strudelUpdateTimer;
-let strudelEditTimer;
 let strudelInitPromise;
 let strudelLastUpdate = "";
 let strudelLastErrorTemplate = "";
@@ -224,11 +188,30 @@ let strudelApplying = false;
 function showError(message) {
   elements.error.textContent = message;
   elements.error.hidden = false;
+  sizeDetector();
 }
 
 function clearError() {
   elements.error.textContent = "";
   elements.error.hidden = true;
+  sizeDetector();
+}
+
+function sizeDetector() {
+  const reservedRows = [
+    elements.controls,
+    elements.frameControl,
+    elements.status,
+    elements.audioStatus,
+  ];
+  if (!elements.error.hidden) reservedRows.push(elements.error);
+  const rowGap = Number.parseFloat(getComputedStyle(elements.visualizer).rowGap);
+  const reservedHeight = reservedRows.reduce((total, row) => total + row.offsetHeight, 0)
+    + rowGap * reservedRows.length;
+  const availableHeight = Math.max(0, elements.visualizer.clientHeight - reservedHeight);
+  const size = Math.floor(Math.min(elements.visualizer.clientWidth, 920, availableHeight));
+  const width = `${size}px`;
+  if (elements.detectorWrap.style.width !== width) elements.detectorWrap.style.width = width;
 }
 
 function sampleAt(frame, y, x) {
@@ -318,125 +301,9 @@ function patternControlValues(frame) {
   return values;
 }
 
-function buildPatternGrid() {
-  elements.patternGrid.replaceChildren();
-  instrumentRows.forEach((row) => {
-    const rowElement = document.createElement("section");
-    rowElement.className = "instrument-row";
-    const heading = document.createElement("h3");
-    heading.className = "instrument-heading";
-    heading.textContent = row.label;
-    rowElement.append(heading);
-
-    const tracksElement = document.createElement("div");
-    tracksElement.className = "pattern-row";
-    row.tracks.forEach(([id, label], columnIndex) => {
-      const card = document.createElement("article");
-      card.className = "pattern-card";
-      card.dataset.track = id;
-      const title = document.createElement("h4");
-      title.textContent = `${columnIndex + 1}. ${label}`;
-      const location = document.createElement("p");
-      location.className = "pattern-location";
-      const sensorBottom = 16 - (row.blockRow + 1) * 4;
-      const pan = [0.05, 0.35, 0.65, 0.95][columnIndex];
-      const panLabel = pan < 0.5
-        ? `L ${Math.round((0.5 - pan) * 200)}%`
-        : `R ${Math.round((pan - 0.5) * 200)}%`;
-      location.textContent =
-        `Detector x=${columnIndex * 4}–${columnIndex * 4 + 3}, y=${sensorBottom}–${sensorBottom + 3} · pan ${panLabel}`;
-      card.append(title, location);
-
-      const average = document.createElement("p");
-      average.className = "block-average";
-      const mode = document.createElement("p");
-      mode.className = "pattern-state";
-      const thresholdLabel = document.createElement("label");
-      thresholdLabel.className = "threshold-control";
-      thresholdLabel.textContent = "Quiet threshold";
-      const thresholdInput = document.createElement("input");
-      thresholdInput.type = "range";
-      thresholdInput.min = "0";
-      thresholdInput.max = "100";
-      thresholdInput.step = "1";
-      thresholdInput.value = String(Math.round((quietThresholds.get(id) ?? defaultQuietThreshold) * 100));
-      thresholdInput.setAttribute("aria-label", `${label} quiet-mode threshold`);
-      const thresholdValue = document.createElement("output");
-      thresholdValue.textContent = `${thresholdInput.value}%`;
-      thresholdLabel.append(thresholdInput, thresholdValue);
-
-      thresholdInput.addEventListener("input", () => {
-        quietThresholds.set(id, Number(thresholdInput.value) / 100);
-        thresholdValue.textContent = `${thresholdInput.value}%`;
-        refreshPatternGrid();
-      });
-      thresholdInput.addEventListener("change", () => {
-        if (strudelActive) {
-          applyStrudelCode().catch((error) => {
-            showError(error instanceof Error ? error.message : String(error));
-          });
-        }
-      });
-      card.append(average, mode, thresholdLabel);
-
-      const controls = [
-        ["reverb", "Reverb"],
-        ["volume", "Volume"],
-        ["delay", "Delay"],
-      ];
-      const controlGrid = document.createElement("div");
-      controlGrid.className = "pattern-controls";
-      controls.forEach(([name, labelText]) => {
-        const control = document.createElement("div");
-        control.className = "pattern-control";
-        control.dataset.control = name;
-        const label = document.createElement("span");
-        label.textContent = labelText;
-        const value = document.createElement("output");
-        value.className = "control-value";
-        control.append(label, value);
-        controlGrid.append(control);
-      });
-      card.append(controlGrid);
-      quietThresholds.set(id, quietThresholds.get(id) ?? defaultQuietThreshold);
-      tracksElement.append(card);
-    });
-    rowElement.append(tracksElement);
-    elements.patternGrid.append(rowElement);
-  });
-}
-
-function refreshPatternGrid() {
-  if (!samples) return;
-  const values = patternControlValues(frameIndex);
-  for (const [id, controls] of Object.entries(values)) {
-    const card = elements.patternGrid.querySelector(`[data-track="${id}"]`);
-    card.classList.toggle("quiet-mode", controls.quiet);
-    card.querySelector(".block-average").textContent =
-      `4 × 4 mean: ${controls.average.toPrecision(5)} photons · ${Math.round(controls.normalizedAverage * 100)}% normalized`;
-    card.querySelector(".pattern-state").textContent = controls.quiet
-      ? "Quiet pattern"
-      : "Full pattern";
-    const threshold = card.querySelector(".threshold-control");
-    threshold.querySelector("input").value = String(Math.round(controls.threshold * 100));
-    threshold.querySelector("output").textContent = `${Math.round(controls.threshold * 100)}%`;
-    for (const [name, value] of Object.entries(controls)) {
-      if (name === "average" || name === "normalizedAverage" || name === "quiet" || name === "threshold" || name === "pan" || name === "pattern") continue;
-      const control = card.querySelector(`[data-control="${name}"]`);
-      const percent = name === "reverb" || name === "delay"
-        ? Math.round(value * 200)
-        : name === "volume"
-          ? Math.round(value * 100)
-          : Math.round((1 - value) * 100);
-      control.style.setProperty("--level", `${percent}%`);
-      control.querySelector("output").textContent = `${percent}%`;
-    }
-  }
-}
-
 function getEvaluatedStrudelCode() {
   const controls = patternControlValues(frameIndex);
-  const code = elements.strudelCode.value.replace(
+  const code = patternTemplate.replace(
     /\{\{([a-z_]+)\.(volume|reverb|delay|pan|pattern)\}\}/g,
     (placeholder, track, parameter) => {
       const value = controls[track]?.[parameter];
@@ -456,98 +323,68 @@ function getEvaluatedStrudelCode() {
 async function applyStrudelCode() {
   if (!strudel || !strudelActive) return;
   const code = getEvaluatedStrudelCode();
-  if (
-    code === strudelLastUpdate
-    || elements.strudelCode.value === strudelLastErrorTemplate
-    || strudelApplying
-  ) return;
+  if (code === strudelLastUpdate || strudelLastErrorTemplate === code || strudelApplying) return;
   strudelApplying = true;
-  elements.strudelStatus.textContent = `Applying detector controls from frame ${frameIndex}…`;
   try {
     await strudel.transpiler(code);
     await strudel.evaluate(code, true);
     strudelLastUpdate = code;
     strudelLastErrorTemplate = "";
-    elements.strudelStatus.textContent = `Strudel playing · controls last applied from frame ${frameIndex}.`;
   } catch (error) {
-    strudelLastErrorTemplate = elements.strudelCode.value;
+    strudelLastErrorTemplate = code;
     throw error;
   } finally {
     strudelApplying = false;
   }
 }
 
-function preloadStrudel() {
+async function preloadStrudel() {
   if (!strudelLoadPromise) {
     strudelLoadPromise = import("https://esm.sh/@strudel/web@1.3.0");
   }
-  return strudelLoadPromise.then((module) => {
-    strudel = module;
-    strudelLoadFailed = false;
-    elements.strudelStatus.textContent = "Strudel is ready. Press Start Strudel to begin.";
-    if (samples) elements.strudelStart.disabled = false;
-    return module;
-  }).catch((error) => {
+  try {
+    strudel = await strudelLoadPromise;
+    return strudel;
+  } catch (error) {
     strudelLoadPromise = undefined;
-    strudelLoadFailed = true;
     throw error;
-  });
+  }
 }
 
-function startStrudel() {
-  if (strudelActive) return;
+async function startStrudel() {
+  if (strudelActive || strudelStarting) return;
   clearError();
-  if (!strudel) {
-    elements.strudelStart.disabled = true;
-    elements.strudelStatus.textContent = "Loading Strudel. Press Start again when it is ready.";
-    preloadStrudel().then(() => {
-      elements.strudelStart.disabled = false;
-    }).catch((error) => {
-      elements.strudelStart.disabled = false;
-      elements.strudelStatus.textContent = "Could not load Strudel; check your connection and try again.";
-      showError(error instanceof Error ? error.message : String(error));
-    });
-    return;
-  }
-
-  elements.strudelStart.disabled = true;
-  elements.strudelStatus.textContent = "Loading Strudel and drum samples…";
+  strudelStarting = true;
+  elements.audioStatus.textContent = "Loading Strudel and drum samples…";
   try {
+    if (!strudel) await preloadStrudel();
+    if (playbackTimer === undefined) return;
     if (!strudelInitPromise) {
       strudelInitPromise = strudel.initStrudel({
         prebake: () => strudel.samples("github:tidalcycles/dirt-samples"),
       });
     }
-  } catch (error) {
-    elements.strudelStart.disabled = false;
-    elements.strudelStatus.textContent = "Could not start Strudel.";
-    showError(error instanceof Error ? error.message : String(error));
-    return;
-  }
-
-  strudelInitPromise.then(async () => {
+    await strudelInitPromise;
+    if (playbackTimer === undefined) return;
     strudelActive = true;
     strudelLastUpdate = "";
     strudelLastErrorTemplate = "";
     await applyStrudelCode();
     strudelUpdateTimer = window.setInterval(() => {
-      if (strudelEditTimer !== undefined) return;
       applyStrudelCode().catch((error) => {
         showError(error instanceof Error ? error.message : String(error));
-        elements.strudelStatus.textContent = "Pattern update failed; the previous Strudel patterns are still playing.";
       });
     }, 500);
-    elements.strudelUpdate.disabled = false;
-    elements.strudelStop.disabled = false;
-  }).catch((error) => {
+    elements.audioStatus.textContent = "Audio playing with the detector animation.";
+  } catch (error) {
     if (strudelActive && strudel) strudel.hush();
     if (!strudelActive) strudelInitPromise = undefined;
     strudelActive = false;
-    elements.strudelStatus.textContent = "Could not start Strudel.";
+    elements.audioStatus.textContent = "Could not start audio.";
     showError(error instanceof Error ? error.message : String(error));
-  }).finally(() => {
-    elements.strudelStart.disabled = false;
-  });
+  } finally {
+    strudelStarting = false;
+  }
 }
 
 function stopStrudel() {
@@ -555,24 +392,18 @@ function stopStrudel() {
     window.clearInterval(strudelUpdateTimer);
     strudelUpdateTimer = undefined;
   }
-  if (strudelEditTimer !== undefined) {
-    window.clearTimeout(strudelEditTimer);
-    strudelEditTimer = undefined;
-  }
   if (strudel && strudelActive) strudel.hush();
   strudelActive = false;
   strudelLastUpdate = "";
   strudelLastErrorTemplate = "";
-  elements.strudelStatus.textContent = "Strudel is not running.";
-  elements.strudelUpdate.disabled = true;
-  elements.strudelStop.disabled = true;
+  elements.audioStatus.textContent = "Audio stopped.";
 }
 
 function drawHeatmap() {
   const { context: ctx, width: canvasWidth, height: canvasHeight } = prepareCanvas(elements.detector);
-  const left = 38;
-  const top = 10;
-  const cellSize = Math.min(canvasWidth - left - 8, canvasHeight - top - 34) / width;
+  const cellSize = Math.min(canvasWidth / width, canvasHeight / height);
+  const left = (canvasWidth - cellSize * width) / 2;
+  const top = (canvasHeight - cellSize * height) / 2;
   const plotSize = cellSize * width;
 
   ctx.clearRect(0, 0, canvasWidth, canvasHeight);
@@ -586,10 +417,11 @@ function drawHeatmap() {
     }
   }
 
+  if (showPatternOverlay) drawPatternOverlay(ctx, left, top, cellSize);
+
   ctx.save();
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.52)";
-  ctx.lineWidth = 1;
-  ctx.setLineDash([3, 3]);
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.26)";
+  ctx.lineWidth = Math.max(0.5, cellSize * 0.025);
   for (let x = 0; x <= width; x += 1) {
     const position = left + x * cellSize;
     ctx.beginPath();
@@ -604,9 +436,8 @@ function drawHeatmap() {
     ctx.lineTo(left + plotSize, position);
     ctx.stroke();
   }
-  ctx.setLineDash([]);
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
-  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
+  ctx.lineWidth = Math.max(1, cellSize * 0.06);
   for (let block = 0; block <= width; block += 4) {
     const x = left + block * cellSize;
     const y = top + block * cellSize;
@@ -617,185 +448,54 @@ function drawHeatmap() {
     ctx.lineTo(left + plotSize, y);
     ctx.stroke();
   }
-  ctx.strokeStyle = "#ff5252";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(left + (width / 2) * cellSize, top);
-  ctx.lineTo(left + (width / 2) * cellSize, top + plotSize);
-  ctx.moveTo(left, top + (height / 2) * cellSize);
-  ctx.lineTo(left + plotSize, top + (height / 2) * cellSize);
-  ctx.stroke();
-
-  ctx.strokeStyle = "#ffffff";
-  ctx.lineWidth = 2;
-  ctx.strokeRect(
-    left + selectedPixel.x * cellSize + 1,
-    top + (height - 1 - selectedPixel.y) * cellSize + 1,
-    cellSize - 2,
-    cellSize - 2,
-  );
-  ctx.fillStyle = "#c6d0dd";
-  ctx.font = "11px system-ui, sans-serif";
-  ctx.textAlign = "center";
-  for (let x = 0; x < width; x += 1) {
-    ctx.fillText(String(x), left + (x + 0.5) * cellSize, top + plotSize + 16);
-  }
-  ctx.textAlign = "right";
-  for (let y = 0; y < height; y += 1) {
-    ctx.fillText(String(y), left - 7, top + (height - y - 0.5) * cellSize + 4);
-  }
   ctx.restore();
 }
 
-function drawChartAxes(ctx, canvasWidth, canvasHeight, bounds) {
-  const plot = {
-    left: 58,
-    right: canvasWidth - 14,
-    top: 14,
-    bottom: canvasHeight - 34,
-  };
-  const range = bounds.max - bounds.min || 1;
-  ctx.clearRect(0, 0, canvasWidth, canvasHeight);
-  ctx.font = "11px system-ui, sans-serif";
-  ctx.lineWidth = 1;
-  ctx.strokeStyle = "rgba(194, 208, 224, 0.18)";
-  ctx.fillStyle = "#aab6c5";
-  ctx.textAlign = "right";
-
-  for (let tick = 0; tick <= 4; tick += 1) {
-    const fraction = tick / 4;
-    const y = plot.bottom - fraction * (plot.bottom - plot.top);
-    const value = bounds.min + fraction * range;
-    ctx.beginPath();
-    ctx.moveTo(plot.left, y);
-    ctx.lineTo(plot.right, y);
-    ctx.stroke();
-    ctx.fillText(value.toPrecision(4), plot.left - 7, y + 4);
-  }
-
-  ctx.textAlign = "center";
-  for (let tick = 0; tick <= 4; tick += 1) {
-    const fraction = tick / 4;
-    const x = plot.left + fraction * (plot.right - plot.left);
-    const frame = Math.round(fraction * (frameCount - 1));
-    ctx.beginPath();
-    ctx.moveTo(x, plot.top);
-    ctx.lineTo(x, plot.bottom);
-    ctx.stroke();
-    ctx.fillText(String(frame), x, plot.bottom + 18);
-  }
-
-  return { plot, range };
-}
-
-function drawLightcurve() {
-  const { context: ctx, width: canvasWidth, height: canvasHeight } = prepareCanvas(elements.lightcurve);
-  const { plot, range } = drawChartAxes(ctx, canvasWidth, canvasHeight, lightcurveBounds);
-  const xForFrame = (frame) => plot.left + frame / Math.max(1, frameCount - 1) * (plot.right - plot.left);
-  const yForValue = (value) => plot.bottom - (value - lightcurveBounds.min) / range * (plot.bottom - plot.top);
-
-  ctx.strokeStyle = "#60a5fa";
-  ctx.lineWidth = 1.4;
-  ctx.beginPath();
-  for (let frame = 0; frame < frameCount; frame += 1) {
-    const x = xForFrame(frame);
-    const y = yForValue(selectedLightcurve[frame]);
-    if (frame === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  }
-  ctx.stroke();
-  drawFrameCursor(ctx, xForFrame, yForValue, selectedLightcurve[frameIndex]);
-}
-
-function drawFrameCursor(ctx, xForFrame, yForValue, value) {
-  const x = xForFrame(frameIndex);
+function drawPatternOverlay(ctx, left, top, cellSize) {
+  const blockSize = cellSize * 4;
+  const fontSize = Math.max(7, Math.min(13, blockSize * 0.075));
+  const values = patternControlValues(frameIndex);
   ctx.save();
-  ctx.strokeStyle = "#ff5252";
-  ctx.fillStyle = "#ff5252";
-  ctx.setLineDash([5, 4]);
-  ctx.beginPath();
-  ctx.moveTo(x, 14);
-  ctx.lineTo(x, elements.lightcurve.clientHeight - 34);
-  ctx.stroke();
-  ctx.setLineDash([]);
-  ctx.beginPath();
-  ctx.arc(x, yForValue(value), 4, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-}
+  ctx.textAlign = "left";
+  ctx.textBaseline = "top";
+  instrumentRows.forEach((row) => {
+    row.tracks.forEach(([id, label], column) => {
+      const controls = values[id];
+      const x = left + column * blockSize;
+      const y = top + row.blockRow * blockSize;
+      const padding = Math.max(3, blockSize * 0.06);
+      ctx.fillStyle = controls.quiet ? "rgba(112, 67, 31, 0.66)" : "rgba(12, 88, 78, 0.54)";
+      ctx.fillRect(x, y, blockSize, blockSize);
+      ctx.strokeStyle = controls.quiet ? "#f2bd6b" : "#5eead4";
+      ctx.lineWidth = Math.max(1, blockSize * 0.012);
+      ctx.strokeRect(x + 1, y + 1, blockSize - 2, blockSize - 2);
 
-function drawAllLightcurves() {
-  if (!showAllCurves) return;
-  const { context: ctx, width: canvasWidth, height: canvasHeight } = prepareCanvas(elements.allCurvesChart);
-  const { plot, range } = drawChartAxes(ctx, canvasWidth, canvasHeight, {
-    min: dataset.percentile1,
-    max: dataset.percentile99,
+      ctx.fillStyle = "#ffffff";
+      ctx.font = `600 ${fontSize}px system-ui, sans-serif`;
+      ctx.fillText(label, x + padding, y + padding, blockSize - padding * 2);
+      ctx.fillStyle = controls.quiet ? "#ffe0ad" : "#c8fff4";
+      ctx.font = `${fontSize * 0.88}px system-ui, sans-serif`;
+      const lineHeight = fontSize * 1.2;
+      const lines = [
+        controls.quiet ? "Low energy" : "High energy",
+        `Vol ${Math.round(controls.volume * 100)}%`,
+        `Reverb ${Math.round(controls.reverb * 100)}%`,
+        `Delay ${Math.round(controls.delay * 100)}%`,
+      ];
+      lines.forEach((line, index) => {
+        ctx.fillText(line, x + padding, y + padding + fontSize * 1.25 + index * lineHeight, blockSize - padding * 2);
+      });
+    });
   });
-  const frameSpan = Math.max(1, frameCount - 1);
-  const yForValue = (value) => plot.bottom - (value - dataset.percentile1) / range * (plot.bottom - plot.top);
-
-  ctx.save();
-  ctx.lineWidth = 0.65;
-  ctx.strokeStyle = "rgba(96, 165, 250, 0.19)";
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      ctx.beginPath();
-      for (let frame = 0; frame < frameCount; frame += 1) {
-        const px = plot.left + frame / frameSpan * (plot.right - plot.left);
-        const py = yForValue(sampleAt(frame, y, x));
-        if (frame === 0) ctx.moveTo(px, py);
-        else ctx.lineTo(px, py);
-      }
-      ctx.stroke();
-    }
-  }
-
-  ctx.strokeStyle = "#f8fafc";
-  ctx.lineWidth = 1.7;
-  ctx.beginPath();
-  for (let frame = 0; frame < frameCount; frame += 1) {
-    const px = plot.left + frame / frameSpan * (plot.right - plot.left);
-    const py = yForValue(sampleAt(frame, selectedPixel.y, selectedPixel.x));
-    if (frame === 0) ctx.moveTo(px, py);
-    else ctx.lineTo(px, py);
-  }
-  ctx.stroke();
   ctx.restore();
-}
-
-function updateReadout() {
-  const value = sampleAt(frameIndex, selectedPixel.y, selectedPixel.x);
-  elements.frameTitle.textContent = `Frame ${frameIndex}`;
-  elements.pixelReadout.textContent =
-    `Pixel x=${selectedPixel.x}, y=${selectedPixel.y} · ${value.toPrecision(8)} photons`;
-  elements.status.textContent =
-    `${dataset.label} · ${frameCount.toLocaleString()} frames · ${width} × ${height} · frame ${frameIndex}`;
 }
 
 function render() {
   if (!samples) return;
-  elements.frameNumber.value = String(frameIndex);
   elements.frameSlider.value = String(frameIndex);
+  elements.frameLabel.textContent = `Frame ${frameIndex + 1} / ${frameCount.toLocaleString()}`;
+  elements.status.textContent = `${frameCount.toLocaleString()} frames · ${width} × ${height}`;
   drawHeatmap();
-  drawLightcurve();
-  updateReadout();
-  refreshPatternGrid();
-}
-
-function selectPixel(x, y) {
-  selectedPixel = { x, y };
-  selectedLightcurve = new Array(frameCount);
-  let min = Infinity;
-  let max = -Infinity;
-  for (let frame = 0; frame < frameCount; frame += 1) {
-    const value = sampleAt(frame, y, x);
-    selectedLightcurve[frame] = value;
-    min = Math.min(min, value);
-    max = Math.max(max, value);
-  }
-  lightcurveBounds = { min, max };
-  render();
-  drawAllLightcurves();
 }
 
 function setFrame(frame) {
@@ -805,41 +505,24 @@ function setFrame(frame) {
 }
 
 function advanceFrame() {
-  frameIndex = frameIndex >= rangeEnd ? rangeStart : frameIndex + 1;
+  frameIndex = (frameIndex + 1) % frameCount;
   render();
 }
 
 function schedulePlayback() {
-  playbackTimer = window.setInterval(advanceFrame, Number(elements.speed.value));
-}
-
-function drawExportFrame(ctx, canvas) {
-  ctx.fillStyle = "#10151d";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = "#edf2f7";
-  ctx.font = "bold 24px system-ui, sans-serif";
-  ctx.fillText(`${dataset.label} · frame ${frameIndex}`, 32, 40);
-  ctx.font = "16px system-ui, sans-serif";
-  ctx.fillStyle = "#aab6c5";
-  ctx.fillText(
-    `Pixel x=${selectedPixel.x}, y=${selectedPixel.y} · ${sampleAt(frameIndex, selectedPixel.y, selectedPixel.x).toPrecision(8)} photons`,
-    650,
-    86,
-  );
-  ctx.drawImage(elements.detector, 32, 64, 560, 560);
-  ctx.drawImage(elements.lightcurve, 620, 120, 548, 400);
+  playbackTimer = window.setInterval(advanceFrame, frameIntervalMs);
 }
 
 function detectorCellFromEvent(event) {
   const bounds = elements.detector.getBoundingClientRect();
-  const left = 38;
-  const top = 10;
-  const cellSize = Math.min(bounds.width - left - 8, bounds.height - top - 34) / width;
+  const cellSize = Math.min(bounds.width / width, bounds.height / height);
+  const left = (bounds.width - cellSize * width) / 2;
+  const top = (bounds.height - cellSize * height) / 2;
   const x = Math.floor((event.clientX - bounds.left - left) / cellSize);
   const displayY = Math.floor((event.clientY - bounds.top - top) / cellSize);
   const y = height - 1 - displayY;
   if (x < 0 || x >= width || y < 0 || y >= height) return undefined;
-  return { x, y, cellSize, left, top, bounds };
+  return { x, y, cellSize, left, top };
 }
 
 function showDetectorTooltip(event) {
@@ -868,93 +551,24 @@ function showDetectorTooltip(event) {
   elements.detectorTooltip.hidden = false;
 }
 
-async function exportAnimation() {
-  if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) {
-    throw new Error("This browser does not support WebM animation export.");
-  }
-  if (rangeEnd < rangeStart) {
-    throw new Error("End frame must be greater than or equal to start frame.");
-  }
-
-  const mimeType = [
-    "video/webm;codecs=vp9",
-    "video/webm;codecs=vp8",
-    "video/webm",
-  ].find((candidate) => MediaRecorder.isTypeSupported(candidate));
-  if (!mimeType) throw new Error("This browser cannot encode WebM video.");
-
-  const previousFrame = frameIndex;
-  const canvas = document.createElement("canvas");
-  canvas.width = 1200;
-  canvas.height = 680;
-  const ctx = canvas.getContext("2d");
-  const stream = canvas.captureStream(60);
-  let recorder;
-
-  elements.exportAnimation.disabled = true;
-  stopPlayback();
-  try {
-    recorder = new MediaRecorder(stream, { mimeType });
-    const chunks = [];
-    recorder.addEventListener("dataavailable", (event) => {
-      if (event.data.size > 0) chunks.push(event.data);
-    });
-    const stopped = new Promise((resolve, reject) => {
-      recorder.addEventListener("stop", resolve, { once: true });
-      recorder.addEventListener("error", (event) => {
-        reject(event.error ?? new Error("WebM recording failed."));
-      }, { once: true });
-    });
-    recorder.start();
-
-    const frameTotal = rangeEnd - rangeStart + 1;
-    for (let frame = rangeStart; frame <= rangeEnd; frame += 1) {
-      setFrame(frame);
-      drawExportFrame(ctx, canvas);
-      elements.status.textContent = `Exporting frame ${frame - rangeStart + 1} of ${frameTotal}…`;
-      await new Promise((resolve) => window.setTimeout(resolve, Number(elements.speed.value)));
-    }
-
-    recorder.stop();
-    await stopped;
-    const blob = new Blob(chunks, { type: recorder.mimeType });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${dataset.source.replace(/\.npy$/i, "")}_frames-${rangeStart}-${rangeEnd}.webm`;
-    link.click();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-  } finally {
-    if (recorder && recorder.state !== "inactive") recorder.stop();
-    stream.getTracks().forEach((track) => track.stop());
-    elements.exportAnimation.disabled = false;
-    setFrame(previousFrame);
-  }
-}
-
 function stopPlayback() {
   if (playbackTimer !== undefined) {
     window.clearInterval(playbackTimer);
     playbackTimer = undefined;
   }
+  elements.play.disabled = !samples;
+  elements.stop.disabled = true;
+  stopStrudel();
 }
 
 function startPlayback() {
-  if (rangeEnd < rangeStart) {
-    throw new Error("End frame must be greater than or equal to start frame.");
-  }
-  stopPlayback();
-  frameIndex = rangeStart;
+  if (!samples || playbackTimer !== undefined) return;
+  if (frameIndex >= frameCount - 1) frameIndex = 0;
   render();
   schedulePlayback();
-}
-
-function updateRangeInputs() {
-  rangeStart = Math.max(0, Math.min(frameCount - 1, Number(elements.startFrame.value)));
-  rangeEnd = Math.max(0, Math.min(frameCount - 1, Number(elements.endFrame.value)));
-  elements.startFrame.value = String(rangeStart);
-  elements.endFrame.value = String(rangeEnd);
-  stopPlayback();
+  elements.play.disabled = true;
+  elements.stop.disabled = false;
+  startStrudel();
 }
 
 function loadSamples(buffer, metadata) {
@@ -996,19 +610,12 @@ async function loadDataset(metadata) {
   samples = nextSamples;
   [frameCount, height, width] = metadata.shape;
   frameIndex = 0;
-  rangeStart = 0;
-  rangeEnd = frameCount - 1;
-  elements.frameNumber.max = String(frameCount - 1);
   elements.frameSlider.max = String(frameCount - 1);
-  elements.startFrame.max = String(frameCount - 1);
-  elements.endFrame.max = String(frameCount - 1);
-  elements.startFrame.value = "0";
-  elements.endFrame.value = String(rangeEnd);
-  elements.scaleMin.textContent = metadata.percentile1.toPrecision(4);
-  elements.scaleMax.textContent = metadata.percentile99.toPrecision(4);
-  selectPixel(selectedPixel.x, selectedPixel.y);
   for (const control of interactiveControls) control.disabled = false;
-  elements.strudelStart.disabled = !strudel && !strudelLoadFailed;
+  elements.stop.disabled = true;
+  elements.audioStatus.textContent = "Audio ready · press Play to begin.";
+  render();
+  sizeDetector();
 }
 
 function configureEvents() {
@@ -1021,94 +628,35 @@ function configureEvents() {
       elements.status.textContent = "Dataset could not be loaded.";
     }
   });
-  elements.previous.addEventListener("click", () =>
-    setFrame(frameIndex === 0 ? frameCount - 1 : frameIndex - 1));
-  elements.next.addEventListener("click", () =>
-    setFrame(frameIndex === frameCount - 1 ? 0 : frameIndex + 1));
-  elements.play.addEventListener("click", () => {
-    try {
-      startPlayback();
-    } catch (error) {
-      showError(error instanceof Error ? error.message : String(error));
-    }
-  });
+  elements.play.addEventListener("click", startPlayback);
   elements.stop.addEventListener("click", stopPlayback);
-  elements.frameNumber.addEventListener("change", () => setFrame(Number(elements.frameNumber.value)));
-  elements.frameSlider.addEventListener("input", () => setFrame(Number(elements.frameSlider.value)));
-  elements.startFrame.addEventListener("change", updateRangeInputs);
-  elements.endFrame.addEventListener("change", updateRangeInputs);
-  elements.speed.addEventListener("input", () => {
-    elements.speedLabel.value = `${elements.speed.value} ms`;
-    if (playbackTimer !== undefined) {
-      window.clearInterval(playbackTimer);
-      schedulePlayback();
-    }
-  });
-  elements.strudelStart.addEventListener("click", startStrudel);
-  elements.strudelUpdate.addEventListener("click", () => {
-    applyStrudelCode().catch((error) => {
-      showError(error instanceof Error ? error.message : String(error));
-    });
-  });
-  elements.strudelStop.addEventListener("click", stopStrudel);
-  elements.strudelCode.addEventListener("input", () => {
+  elements.frameSlider.addEventListener("input", () => {
+    setFrame(Number(elements.frameSlider.value));
     if (strudelActive) {
-      strudelLastUpdate = "";
-      strudelLastErrorTemplate = "";
-      if (strudelEditTimer !== undefined) window.clearTimeout(strudelEditTimer);
-      strudelEditTimer = window.setTimeout(() => {
-        strudelEditTimer = undefined;
-        applyStrudelCode().catch((error) => {
-          showError(error instanceof Error ? error.message : String(error));
-          elements.strudelStatus.textContent = "Pattern edit failed; the previous Strudel patterns are still playing.";
-        });
-      }, 400);
+      applyStrudelCode().catch((error) => {
+        showError(error instanceof Error ? error.message : String(error));
+      });
     }
   });
-  elements.allCurves.addEventListener("click", () => {
-    showAllCurves = !showAllCurves;
-    elements.allCurves.setAttribute("aria-pressed", String(showAllCurves));
-    elements.allCurvesPanel.hidden = !showAllCurves;
-    elements.allCurves.textContent = showAllCurves ? "Hide all lightcurves" : "Show all lightcurves";
-    drawAllLightcurves();
+  elements.patternOverlay.addEventListener("click", () => {
+    showPatternOverlay = !showPatternOverlay;
+    elements.patternOverlay.setAttribute("aria-pressed", String(showPatternOverlay));
+    elements.patternOverlay.textContent = showPatternOverlay ? "Hide pattern controls" : "Show pattern controls";
+    drawHeatmap();
   });
-  elements.exportAnimation.addEventListener("click", async () => {
-    clearError();
-    try {
-      await exportAnimation();
-    } catch (error) {
-      showError(error instanceof Error ? error.message : String(error));
-    }
-  });
-  elements.detector.addEventListener("mousemove", showDetectorTooltip);
+  elements.detector.addEventListener("pointermove", showDetectorTooltip);
   elements.detector.addEventListener("mouseleave", () => {
     elements.detectorTooltip.hidden = true;
   });
-  elements.detector.addEventListener("click", (event) => {
-    const cell = detectorCellFromEvent(event);
-    if (cell) selectPixel(cell.x, cell.y);
+  window.addEventListener("resize", () => {
+    sizeDetector();
+    render();
   });
-  elements.lightcurve.addEventListener("click", (event) => {
-    const bounds = elements.lightcurve.getBoundingClientRect();
-    const plotLeft = 58;
-    const plotRight = bounds.width - 14;
-    const x = event.clientX - bounds.left;
-    if (x < plotLeft || x > plotRight) return;
-    const fraction = (x - plotLeft) / (plotRight - plotLeft);
-    setFrame(Math.round(fraction * (frameCount - 1)));
-  });
-  window.addEventListener("resize", render);
 }
 
 async function initialize() {
   configureEvents();
-  elements.strudelCode.value = patternTemplate;
-  buildPatternGrid();
-  preloadStrudel().catch((error) => {
-    elements.strudelStatus.textContent = "Could not load Strudel; check your connection and try again.";
-    showError(error instanceof Error ? error.message : String(error));
-    if (samples && strudelLoadFailed) elements.strudelStart.disabled = false;
-  });
+  sizeDetector();
   try {
     const response = await fetch("data/manifest.json");
     if (!response.ok) throw new Error(`Could not load data/manifest.json (HTTP ${response.status}).`);
@@ -1119,7 +667,7 @@ async function initialize() {
     for (const metadata of manifest.datasets) {
       const option = document.createElement("option");
       option.value = metadata.id;
-      option.textContent = metadata.label;
+      option.textContent = metadata.id.toLowerCase().includes("meteor") ? "Meteor" : "Space debris";
       option.dataset.metadata = JSON.stringify(metadata);
       elements.dataset.append(option);
     }

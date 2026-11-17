@@ -43,36 +43,17 @@ Each quadrant's mean normalized photon intensity controls its tone's volume. A b
 
 ## Use the viewer and Strudel
 
-- Choose either dataset, navigate frames, and click or drag the frame slider.
-- Click a detector cell to select its pixel. The lightcurve follows that pixel; click the lightcurve to seek to a frame.
-- Set a start/end frame range and frame interval, then press **Play** to animate the detector.
-- Use **Show all lightcurves** to compare all 256 pixels.
-- Use **Export range as WebM** to save a silent animation of the heatmap and selected-pixel lightcurve for the selected frame range.
-- Press **Start Strudel** to start the live house patterns. Press **Stop Strudel** to silence them. The browser only starts audio after that user gesture.
-- Each displayed detector block is 4 × 4 pixels. Its 16 pixel values are averaged to report the block's mean light intensity in photons. The mean is also normalized against that dataset's 1st–99th percentile range and clipped to 0–1 for consistent thresholding across datasets.
-- Every pattern block has its own adjustable **Quiet threshold** slider (default 30% of the normalized range). If its block-average light is below the threshold, the quiet version plays; otherwise, the full version plays. A block changing its threshold does not change any other block.
-- The 2 × 2 top-left, top-right, and bottom-left sub-quadrants set **Reverb** (up to 50%), **Volume** (5–100%), and **Delay** (up to 50%). Density/sparsity is intentionally not used in the Strudel patterns.
-- Pattern columns are panned left-to-right at 90% left, 30% left, 30% right, and 90% right. The outer blocks are therefore strongly separated in stereo; the two middle blocks sit nearer the center.
-- Hover over the detector heatmap for the instrument, part, block average, and quiet/full state assigned to that 4 × 4 region.
-- Instrument rows follow the detector from top to bottom: keys, drums, bass, percussion. Each uses four distinct parts. The bass has matching left/right low pulses and two higher, complementary runs in the middle; percussion includes stereo closed-hi-hat shaker textures, tom accents, and rimshots.
-- While Strudel is running, the active script is re-evaluated at most twice per second with current detector controls. **Apply current frame** immediately applies the currently displayed frame.
-
-There are four patterns per instrument row. The drums put a low kick with hi-hat on the left, snare and tom in the center, and a higher kick with hi-hat on the right. Both kicks share the same quiet heartbeat (`bd [~ bd] ~ ~`) and full four-on-the-floor (`bd*4`) rhythms, with different playback speeds and stereo positions. The snare has an additional 15% gain multiplier to keep it behind the kick. The keys put matching chord progressions with different inversions on the outer blocks and a structurally matching, chord-tone melody across the inner pair. Quiet keys switch to quiet, scattered high-register phrases.
-
-### Editing the Strudel patterns
-
-Open **Strudel script — edit patterns**. Each line beginning with `$:` is a normal Strudel pattern. Change the notes, sample names, mini-notation, or effects in those expressions. Keep the `{{track.parameter}}` placeholders in place when you want a value to follow its detector block. A `{{track.pattern}}` placeholder switches between that track's quiet/full mini-notation patterns, while `volume`, `reverb`, `delay`, and `pan` are replaced by live numbers. For example:
-
-```js
-$: stack(s("{{drum_kick_left.pattern}}").speed(0.82), s("hh*8").gain(0.22)).gain({{drum_kick_left.volume}}).room({{drum_kick_left.reverb}}).delay({{drum_kick_left.delay}}).pan({{drum_kick_left.pan}})
-```
-
-The bundled Strudel web runtime is loaded from esm.sh at version 1.3.0; its starter drum samples are loaded from the public `tidalcycles/dirt-samples` repository. Starting Strudel therefore requires an internet connection. The sample set has no `sh` or `rim` groups: the shaker parts use the available `hh` closed-hi-hat samples, and the rim part uses the available `rs` rimshot sample. The editable starter script is in `app.js` as `patternTemplate`; quiet/full note patterns are in `patternModes`. Change those defaults if you want your revised arrangement to be the new starter. You can also copy the generated script from the browser into <https://strudel.cc/> to experiment there.
+- Choose either dataset, drag the frame slider to seek, and press **Play** to start both the detector animation and Strudel audio. **Stop** pauses the animation and silences Strudel. The playback interval is fixed.
+- Use **Show pattern controls** to overlay each 4 × 4 pattern block's name, energy mode, volume, reverb, and delay percentages. Teal shading marks the high-energy pattern; amber shading marks the low-energy pattern. Hover a block for its detector region and threshold details.
+- The 16 pixel values in each pattern block are averaged. That mean is normalized against the dataset's 1st–99th percentile range and clipped to 0–1. Values below the default 28% threshold select the quiet pattern; other values select the full pattern.
+- The upper two rows of patterns are keys and drums; the lower two are bass and percussion. The left/right columns are panned across stereo. The bass uses left/right pulses and complementary runs; percussion includes shakers, toms, and rimshots.
+- Strudel's web runtime is loaded from esm.sh at version 1.3.0, and drum samples are loaded from the public `tidalcycles/dirt-samples` repository. Audio playback therefore requires an internet connection. The sample set has no `sh` or `rim` groups: shaker parts use `hh`, and the rim part uses `rs`.
+- The starter script is in `app.js` as `patternTemplate`; quiet/full variations are in `patternModes`.
 
 ## Code layout
 
 - `convert_npy.py` prepares binary data and its JSON manifest.
-- `app.js` loads the float32 samples, computes block and quadrant averages, draws the heatmap and plots, controls playback, and runs the stereo Strudel patterns.
+- `app.js` loads float32 samples, draws the heatmap and pattern overlay, controls playback, and runs the stereo Strudel patterns.
 - `index.html` and `style.css` provide the browser UI.
 - `sonification.html`, `sonification.css`, and `sonification.js` provide the minimal 10-minute, four-voice HRTF sonification player.
 - `visualize.py` is the original Python/Matplotlib implementation.
