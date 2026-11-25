@@ -1,6 +1,7 @@
 const datasetId = "L1__2026_07_06__13_42_41__LED155V_lensreduction_rotation_10min_WORKING_mediana.npy";
 const gridSize = 16;
 const datasetDurationMs = 10 * 60 * 1000;
+const playbackRate = 0.8;
 const threshold = 0.3;
 const maxPitchShiftCents = 90;
 const maxBeatFrequency = 12;
@@ -18,22 +19,23 @@ const colorStops = [
   [253, 231, 37],
 ];
 const voices = [
-  { name: "C3", frequency: 130.8128, left: 0, bottom: 8, x: -1.2, z: -1 },
-  { name: "G3", frequency: 195.9977, left: 8, bottom: 8, x: 1.2, z: -1 },
-  { name: "C4", frequency: 261.6256, left: 0, bottom: 0, x: -1.2, z: 1 },
-  { name: "G4", frequency: 391.9954, left: 8, bottom: 0, x: 1.2, z: 1 },
+  { name: "A2", frequency: 110, quadrant: "Bottom left", left: 0, bottom: 8, x: -1.2, z: -1 },
+  { name: "Eb3", frequency: 155.5635, quadrant: "Bottom right", left: 8, bottom: 8, x: 1.2, z: -1 },
+  { name: "A3", frequency: 220, quadrant: "Top left", left: 0, bottom: 0, x: -1.2, z: 1 },
+  { name: "Eb4", frequency: 311.127, quadrant: "Top right", left: 8, bottom: 0, x: 1.2, z: 1 },
 ];
 const screenQuadrants = [2, 3, 0, 1];
 const canvas = document.querySelector("#detector");
 const playButton = document.querySelector("#play");
 const stopButton = document.querySelector("#stop");
+const waveformButtons = document.querySelectorAll(".waveform-toggle");
 const status = document.querySelector("#status");
 const errorMessage = document.querySelector("#error");
 const littleEndian = new Uint8Array(new Uint16Array([1]).buffer)[0] === 1;
 
 let samples;
 let frameCount = 0;
-let frameDurationSeconds = datasetDurationMs / 1000 / 11400;
+let frameDurationSeconds = datasetDurationMs / 1000 / 11400 / playbackRate;
 let frameIndex = 0;
 let percentile1 = 0;
 let percentile99 = 1;
@@ -42,6 +44,7 @@ let audioVoices = [];
 let playbackTimer;
 let playing = false;
 let enabledVoices = voices.map(() => true);
+let waveforms = voices.map(() => "sine");
 let hoveredQuadrant = -1;
 let focusedQuadrant = 0;
 let keyboardFocused = false;
@@ -225,6 +228,26 @@ function toggleQuadrant(index) {
   status.textContent = `${voices[index].name} ${enabledVoices[index] ? "on" : "off"}`;
 }
 
+function updateWaveformButton(index) {
+  const button = waveformButtons[index];
+  const waveform = waveforms[index];
+  button.textContent = `${voices[index].quadrant} · ${voices[index].name}: ${
+    waveform === "sine" ? "Sine" : "Sawtooth"
+  }`;
+  button.setAttribute("aria-pressed", String(waveform === "sine"));
+}
+
+function toggleWaveform(index) {
+  waveforms[index] = waveforms[index] === "sine" ? "sawtooth" : "sine";
+  const audioVoice = audioVoices[index];
+  if (audioVoice) {
+    audioVoice.oscillator.type = waveforms[index];
+    audioVoice.companion.type = waveforms[index];
+  }
+  updateWaveformButton(index);
+  status.textContent = `${voices[index].quadrant} · ${voices[index].name}: ${waveforms[index]}`;
+}
+
 function quadrantAt(event) {
   const bounds = canvas.getBoundingClientRect();
   const x = (event.clientX - bounds.left) / bounds.width;
@@ -243,14 +266,14 @@ function createAudio() {
   compressor.attack.value = 0.003;
   compressor.release.value = 0.15;
   compressor.connect(audioContext.destination);
-  audioVoices = voices.map((voice) => {
+  audioVoices = voices.map((voice, index) => {
     const oscillator = audioContext.createOscillator();
     const gain = audioContext.createGain();
     const companion = audioContext.createOscillator();
     const companionGain = audioContext.createGain();
     const panner = audioContext.createPanner();
-    oscillator.type = "sine";
-    companion.type = "sine";
+    oscillator.type = waveforms[index];
+    companion.type = waveforms[index];
     oscillator.frequency.value = voice.frequency;
     companion.frequency.value = voice.frequency;
     panner.panningModel = "HRTF";
@@ -296,7 +319,7 @@ async function startPlayback() {
     await audioContext.resume();
     playing = true;
     updateAudio(frameIndex);
-    playbackTimer = window.setInterval(advanceFrame, datasetDurationMs / frameCount);
+    playbackTimer = window.setInterval(advanceFrame, datasetDurationMs / frameCount / playbackRate);
     stopButton.disabled = false;
     status.textContent = `Playing · frame ${frameIndex + 1} of ${frameCount.toLocaleString()}`;
   } catch (error) {
@@ -368,7 +391,7 @@ async function initialize() {
       throw new Error("Sample count does not match the dataset manifest.");
     }
     samples = nextSamples;
-    frameDurationSeconds = datasetDurationMs / 1000 / frameCount;
+    frameDurationSeconds = datasetDurationMs / 1000 / frameCount / playbackRate;
     percentile1 = metadata.percentile1;
     percentile99 = metadata.percentile99;
     updateGridLabel();
@@ -382,6 +405,10 @@ async function initialize() {
 
 playButton.addEventListener("click", startPlayback);
 stopButton.addEventListener("click", stopPlayback);
+for (const button of waveformButtons) {
+  const index = Number(button.dataset.voice);
+  button.addEventListener("click", () => toggleWaveform(index));
+}
 canvas.addEventListener("pointermove", (event) => {
   const quadrant = quadrantAt(event);
   if (hoveredQuadrant === quadrant) return;

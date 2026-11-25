@@ -24,6 +24,16 @@
           <button id="play" type="button" disabled>Play</button>
           <button id="stop" type="button" disabled>Stop</button>
         </div>
+        <fieldset class="waveforms">
+          <legend>Waveform by quadrant</legend>
+          <p>Pressed selects sine; not pressed selects sawtooth.</p>
+          <div class="waveform-buttons">
+            <button class="waveform-toggle" data-voice="0" type="button" aria-label="Bottom left quadrant waveform" aria-pressed="true">Bottom left · A2: Sine</button>
+            <button class="waveform-toggle" data-voice="1" type="button" aria-label="Bottom right quadrant waveform" aria-pressed="true">Bottom right · Eb3: Sine</button>
+            <button class="waveform-toggle" data-voice="2" type="button" aria-label="Top left quadrant waveform" aria-pressed="true">Top left · A3: Sine</button>
+            <button class="waveform-toggle" data-voice="3" type="button" aria-label="Top right quadrant waveform" aria-pressed="true">Top right · Eb4: Sine</button>
+          </div>
+        </fieldset>
         <p id="status" role="status" aria-live="polite">Loading 10-minute dataset…</p>
         <p id="error" role="alert" hidden></p>
       </section>
